@@ -442,6 +442,16 @@ class QAUpload {
         // Get webhook URL from config (may have loaded after constructor)
         let webhookUrl = window.config?.N8N_WEBHOOK_URL || this.N8N_WEBHOOK_URL;
         
+        // Debug: Log config state
+        console.log('🔍 Config state:', {
+            hasConfig: !!window.config,
+            configLoaded: window.config?.loaded,
+            webhookFromConfig: window.config?.N8N_WEBHOOK_URL,
+            webhookFromInstance: this.N8N_WEBHOOK_URL,
+            finalWebhookUrl: webhookUrl,
+            allConfig: window.config?.getAll?.()
+        });
+        
         if (!webhookUrl) {
             resultDiv.className = 'result fail';
             resultDiv.style.display = 'block';
@@ -452,19 +462,58 @@ class QAUpload {
                 <p><small>Check browser console for more details.</small></p>
             `;
             submitBtn.disabled = false;
-            console.error('❌ N8N_WEBHOOK_URL is not set. Config:', window.config?.getAll());
+            console.error('❌ N8N_WEBHOOK_URL is not set. Config:', window.config?.getAll?.());
+            return;
+        }
+        
+        // Check if URL is localhost (won't work from production)
+        const isProduction = !window.location.hostname.includes('localhost') && 
+                             !window.location.hostname.includes('127.0.0.1') &&
+                             window.location.protocol === 'https:';
+        const isLocalhostUrl = webhookUrl.includes('localhost') || webhookUrl.includes('127.0.0.1');
+        
+        if (isProduction && isLocalhostUrl) {
+            resultDiv.className = 'result fail';
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = `
+                <h3>❌ Configuration Error</h3>
+                <p><strong>Webhook URL points to localhost.</strong></p>
+                <p><small>In production, you must use a publicly accessible n8n instance URL.</small></p>
+                <p><small>Current URL: ${webhookUrl}</small></p>
+                <p><small>Update N8N_WEBHOOK_URL in Vercel environment variables to your production n8n URL.</small></p>
+            `;
+            submitBtn.disabled = false;
+            console.error('❌ Cannot use localhost URL in production:', webhookUrl);
             return;
         }
         
         console.log('📤 Submitting to webhook:', webhookUrl);
+        console.log('📦 Payload size:', JSON.stringify(payload).length, 'bytes');
         console.log('📦 Payload:', payload);
         
+        // Create abort controller for timeout (if browser supports it)
+        let abortController = null;
+        let timeoutId = null;
+        
         try {
+            // Use AbortSignal.timeout if available, otherwise fallback to setTimeout
+            if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+                abortController = AbortSignal.timeout(30000); // 30 second timeout
+            } else {
+                // Fallback for browsers without AbortSignal.timeout
+                abortController = new AbortController();
+                timeoutId = setTimeout(() => abortController.abort(), 30000);
+            }
+            
             const response = await fetch(webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                signal: abortController.signal
             });
+            
+            // Clear timeout if request succeeds
+            if (timeoutId) clearTimeout(timeoutId);
             
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             
@@ -546,14 +595,33 @@ class QAUpload {
             submitBtn.textContent = 'Submit Another Task';
             submitBtn.disabled = false;
         } catch (error) {
+            // Clear timeout if request fails
+            if (timeoutId) clearTimeout(timeoutId);
+            
             console.error('❌ Submission error:', error);
             console.error('Webhook URL attempted:', webhookUrl);
-            console.error('Full error:', error);
+            console.error('Error name:', error.name);
+            console.error('Error message:', error.message);
+            console.error('Error stack:', error.stack);
+            console.error('Full error object:', error);
             
             // Provide more specific error messages
             let errorMessage = error.message;
-            if (error.message === 'Failed to fetch' || error.message.includes('Failed to fetch')) {
-                errorMessage = 'Network error: Could not reach webhook. Check if n8n is running and CORS is configured.';
+            let errorDetails = '';
+            
+            if (error.name === 'AbortError' || error.message.includes('timeout')) {
+                errorMessage = 'Request timed out. The webhook took too long to respond.';
+                errorDetails = 'This usually means n8n is not responding or is overloaded.';
+            } else if (error.message === 'Failed to fetch' || error.message.includes('Failed to fetch')) {
+                errorMessage = 'Network error: Could not reach webhook.';
+                errorDetails = 'Possible causes:\n' +
+                    '• n8n is not running or not accessible\n' +
+                    '• CORS is not configured in n8n\n' +
+                    '• Webhook URL is incorrect\n' +
+                    '• Network/firewall blocking the request';
+            } else if (error.message.includes('CORS')) {
+                errorMessage = 'CORS error: Browser blocked the request.';
+                errorDetails = 'n8n must allow requests from your domain. Check n8n CORS settings.';
             }
             
             resultDiv.className = 'result fail';
@@ -562,6 +630,7 @@ class QAUpload {
                 <h3>❌ Submission Failed</h3>
                 <p><strong>Failed to submit photos. Please try again.</strong></p>
                 <p><small>Error: ${errorMessage}</small></p>
+                ${errorDetails ? `<p><small style="white-space: pre-line;">${errorDetails}</small></p>` : ''}
                 <p><small style="color: var(--muted); font-size: 11px;">Webhook URL: ${webhookUrl || 'Not configured'}</small></p>
                 <p><small style="color: var(--muted); font-size: 11px;">Check browser console (F12) for more details.</small></p>
             `;
