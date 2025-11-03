@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehicle QA Submission Portal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --navy-900: #0f1a3a;   /* deep navy */
+            --navy-800: #1a2b63;   /* secondary navy */
+            --navy-700: #233a7c;
+            --white: #ffffff;
+            --muted: #c7cbe1;
+            --orange: #ff6a00;    /* fleetfox accent */
+            --orange-700: #ff7f26;
+            --card-bg: rgba(255,255,255,0.06);
+            --card-border: rgba(255,255,255,0.12);
+            --shadow: 0 20px 60px rgba(0,0,0,0.35);
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background:
+                radial-gradient(1200px 600px at 15% 10%, rgba(255,106,0,0.12), transparent 60%),
+                radial-gradient(1000px 500px at 85% 20%, rgba(255,255,255,0.06), transparent 60%),
+                linear-gradient(135deg, var(--navy-900) 0%, var(--navy-800) 55%, var(--navy-700) 100%);
+            color: var(--white);
+            min-height: 100vh;
+            padding: 24px;
+        }
+        
+        /* Top navigation */
+        .topbar {
+            max-width: 1100px;
+            margin: 0 auto 28px auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .brand {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            font-weight: 800;
+            letter-spacing: 0.4px;
+            font-size: 22px;
+        }
+        .brand .accent { color: var(--orange); }
+        .navlinks { display: flex; gap: 20px; color: var(--muted); font-size: 14px; }
+        .navlinks a { color: inherit; text-decoration: none; }
+        .navlinks a:hover { color: var(--white); }
+        
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: linear-gradient(180deg, var(--card-bg), rgba(255,255,255,0.03));
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 36px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(6px);
+        }
+        
+        h1 {
+            text-align: center;
+            color: var(--white);
+            margin-bottom: 6px;
+            font-size: 38px;
+            font-weight: 800;
+            line-height: 1.15;
+            letter-spacing: 0.2px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: var(--muted);
+            margin-bottom: 28px;
+            font-size: 15px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            font-weight: 700;
+            color: var(--white);
+            margin-bottom: 8px;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 14px;
+            color: var(--white);
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            font-size: 14px;
+            transition: border-color 0.25s, background 0.25s;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--orange);
+            background: rgba(255,255,255,0.1);
+        }
+        
+        select {
+            width: 100%;
+            padding: 12px 14px;
+            color: var(--white);
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            font-size: 14px;
+            transition: border-color 0.25s, background 0.25s;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ff6a00' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            padding-right: 40px;
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: var(--orange);
+            background: rgba(255,255,255,0.1);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ff6a00' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+        }
+        
+        select option {
+            background: var(--navy-800);
+            color: var(--white);
+            padding: 12px;
+        }
+        
+        select option:hover,
+        select option:checked {
+            background: var(--orange);
+            color: var(--white);
+        }
+        
+        .upload-section {
+            background: rgba(255,255,255,0.04);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 22px;
+            border: 1px dashed rgba(255,255,255,0.18);
+        }
+        
+        .upload-section h3 {
+            color: var(--white);
+            margin-bottom: 14px;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        
+        .image-upload {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .upload-box {
+            border: 2px dashed rgba(255,255,255,0.18);
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            position: relative;
+            min-height: 150px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .upload-box:hover {
+            border-color: var(--orange);
+            background: rgba(255,106,0,0.06);
+        }
+        
+        .upload-box.uploaded {
+            border-color: var(--orange-700);
+            background: rgba(255,106,0,0.08);
+        }
+        
+        .upload-box input[type="file"] {
+            display: none;
+        }
+        
+        .upload-icon {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .upload-label {
+            font-size: 13px;
+            color: var(--muted);
+            font-weight: 700;
+        }
+        
+        .preview-image {
+            max-width: 100%;
+            max-height: 120px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .remove-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.5);
+            color: #fff;
+            font-weight: 800;
+            border: 1px solid rgba(255,255,255,0.35);
+            cursor: pointer;
+            transition: background 0.2s, transform 0.2s;
+        }
+        .remove-btn:hover { background: rgba(0,0,0,0.7); transform: scale(1.05); }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.12);
+            border-radius: 999px;
+            overflow: hidden;
+            margin-bottom: 18px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--orange) 0%, var(--orange-700) 100%);
+            transition: width 0.3s;
+        }
+        
+        .submit-btn {
+            width: 100%;
+            padding: 14px 16px;
+            background: linear-gradient(135deg, var(--orange) 0%, var(--orange-700) 100%);
+            color: var(--white);
+            border: none;
+            border-radius: 999px;
+            font-size: 16px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.25s, box-shadow 0.25s, opacity 0.2s;
+        }
+        
+        .submit-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 24px rgba(255,106,0,0.28);
+        }
+        
+        .submit-btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 12px;
+            display: none;
+        }
+        
+        .result.success {
+            background: rgba(72,187,120,0.12);
+            border: 1px solid rgba(72,187,120,0.45);
+            color: #d2fde5;
+        }
+        
+        .result.fail {
+            background: rgba(245,101,101,0.12);
+            border: 1px solid rgba(245,101,101,0.45);
+            color: #ffd7d7;
+        }
+        
+        .result.processing {
+            background: rgba(66,153,225,0.12);
+            border: 1px solid rgba(66,153,225,0.45);
+            color: #d3e9ff;
+        }
+        
+        .loader {
+            border: 3px solid rgba(255,255,255,0.18);
+            border-top: 3px solid var(--orange);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+    </head>
+<body>
+    <div class="topbar">
+        <div class="brand">fleet<span class="accent">fox</span></div>
+        <nav class="navlinks">
+            <a href="#">Join our Crew</a>
+            <a href="#">All services</a>
+            <a href="#">About</a>
+        </nav>
+    </div>
+    <div class="container">
+        <h1>🚗 Vehicle QA Submission Portal</h1>
+        <p class="subtitle">Upload photos for AI quality assessment</p>
+        
+        <form id="qaForm">
+            <div class="form-group">
+                <label for="taskId">Task ID *</label>
+                <input type="text" id="taskId" placeholder="e.g., TASK_2025_001" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="foxId">Fox ID *</label>
+                <input type="text" id="foxId" placeholder="Auto-generated" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="clientIdSelect">Client ID *</label>
+                <select id="clientIdSelect" required>
+                    <option value="" disabled selected>Loading clients...</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="vehicleId">Vehicle ID</label>
+                <input type="text" id="vehicleId" placeholder="e.g., ABC-123">
+            </div>
+            
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressBar" style="width: 0%"></div>
+            </div>
+            
+            <div class="upload-section">
+                <h3>📸 Exterior Photos (4 required)</h3>
+                <div class="image-upload">
+                    <div class="upload-box" onclick="document.getElementById('exterior-front').click()">
+                        <input type="file" id="exterior-front" accept="image/*" data-type="exterior_front">
+                        <div class="upload-icon">📷</div>
+                        <div class="upload-label">Front View</div>
+                    </div>
+                    <div class="upload-box" onclick="document.getElementById('exterior-back').click()">
+                        <input type="file" id="exterior-back" accept="image/*" data-type="exterior_back">
+                        <div class="upload-icon">📷</div>
+                        <div class="upload-label">Back View</div>
+                    </div>
+                    <div class="upload-box" onclick="document.getElementById('exterior-left').click()">
+                        <input type="file" id="exterior-left" accept="image/*" data-type="exterior_left">
+                        <div class="upload-icon">📷</div>
+                        <div class="upload-label">Left Side</div>
+                    </div>
+                    <div class="upload-box" onclick="document.getElementById('exterior-right').click()">
+                        <input type="file" id="exterior-right" accept="image/*" data-type="exterior_right">
+                        <div class="upload-icon">📷</div>
+                        <div class="upload-label">Right Side</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="upload-section">
+                <h3>🪑 Interior Photos (3 required)</h3>
+                <div class="image-upload">
+                    <div class="upload-box" onclick="document.getElementById('interior-dashboard').click()">
+                        <input type="file" id="interior-dashboard" accept="image/*" data-type="interior_dashboard">
+                        <div class="upload-icon">📷</div>
+                        <div class="upload-label">Dashboard</div>
+                    </div>
+                    <div class="upload-box" onclick="document.getElementById('interior-seats').click()">
+                        <input type="file" id="interior-seats" accept="image/*" data-type="interior_seats">
+                        <div class="upload-icon">📷</div>
+                        <div class="upload-label">Seats</div>
+                    </div>
+                    <div class="upload-box" onclick="document.getElementById('interior-floor').click()">
+                        <input type="file" id="interior-floor" accept="image/*" data-type="interior_floor">
+                        <div class="upload-icon">📷</div>
+                        <div class="upload-label">Floor Mats</div>
+                    </div>
+                </div>
+            </div>
+            
+            <button type="submit" class="submit-btn" id="submitBtn" disabled>
+                Submit for Quality Check
+            </button>
+        </form>
+        
+        <div id="result" class="result"></div>
+    </div>
+    
+    <script>
+        // Configuration - Loaded from /api/config endpoint (reads from .env)
+        // NO KEYS EXPOSED IN CLIENT CODE - all values come from server
+        let N8N_WEBHOOK_URL = null;
+        let SUPABASE_URL = null;
+        let SUPABASE_ANON_KEY = null;
+        
+        // Load config from API
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                if (response.ok) {
+                    const data = await response.json();
+                    N8N_WEBHOOK_URL = data.N8N_WEBHOOK_URL;
+                    SUPABASE_URL = data.SUPABASE_URL;
+                    SUPABASE_ANON_KEY = data.SUPABASE_ANON_KEY;
+                    console.log('✅ Config loaded from API');
+                } else {
+                    console.error('❌ Failed to load config. Run "vercel dev" or deploy to Vercel');
+                }
+            } catch (error) {
+                console.error('❌ Config load error:', error);
+            }
+        }
+        
+        // Load config on page load
+        loadConfig();
+        
+        const uploadedImages = {};
+        let totalUploaded = 0;
+        
+        // Generate IDs and load clients on startup
+        document.addEventListener('DOMContentLoaded', () => {
+            presetGeneratedIds();
+            loadClientsIntoSelect();
+        });
+
+        function generateSimpleId(prefix) {
+            const d = new Date().toISOString().slice(0,10).replace(/-/g,'');
+            const rand = Math.random().toString(36).slice(2,6).toUpperCase();
+            return `${prefix}_${d}_${rand}`;
+        }
+
+        function presetGeneratedIds() {
+            const taskInput = document.getElementById('taskId');
+            const foxInput = document.getElementById('foxId');
+            if (!taskInput.value) taskInput.value = generateSimpleId('TASK');
+            if (!foxInput.value) foxInput.value = generateSimpleId('FOX');
+        }
+
+        async function loadClientsIntoSelect() {
+            const sel = document.getElementById('clientIdSelect');
+            
+            // Wait for config to load
+            if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+                await loadConfig();
+            }
+            
+            if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+                sel.innerHTML = '<option value="" disabled selected>Failed to load config</option>';
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${SUPABASE_URL}/rest/v1/client_sla?select=id,client_id,active&active=eq.true&order=client_id.asc`, {
+                    headers: {
+                        apikey: SUPABASE_ANON_KEY,
+                        Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+                    }
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const rows = await res.json();
+                sel.innerHTML = '<option value="" disabled selected>Select client...</option>';
+                rows.forEach(r => {
+                    const opt = document.createElement('option');
+                    opt.value = r.id; // UUID for downstream SLA lookups
+                    opt.textContent = r.client_id || r.id.slice(0, 8); // Show CLIENT_ABC, etc.
+                    sel.appendChild(opt);
+                });
+            } catch (err) {
+                console.error('Failed to load clients:', err);
+                sel.innerHTML = '<option value="" disabled selected>Failed to load clients</option>';
+            }
+        }
+
+        // Generate a strong ID (fallback if crypto not available)
+        function generateId() {
+            if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+            return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+        }
+
+        // Upload image to Supabase Storage (bucket: vehicle-qa-images)
+        async function uploadToSupabase(file, imageType, imageId) {
+            // Ensure config is loaded
+            if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+                await loadConfig();
+            }
+            
+            if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+                throw new Error('Supabase config not loaded. Please refresh the page.');
+            }
+            
+            const useId = imageId || generateId();
+            const fileName = `${useId}_${imageType}.jpg`;
+            const filePath = `uploads/${fileName}`;
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch(
+                    `${SUPABASE_URL}/storage/v1/object/vehicle-qa-images/${filePath}`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                            'apikey': SUPABASE_ANON_KEY
+                        },
+                        body: formData
+                    }
+                );
+                
+                if (!response.ok) {
+                    throw new Error('Upload failed');
+                }
+                
+                return `${SUPABASE_URL}/storage/v1/object/public/vehicle-qa-images/${filePath}`;
+                
+            } catch (error) {
+                console.error('Supabase upload error:', error);
+                // Fallback to base64 if upload fails
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.readAsDataURL(file);
+                });
+            }
+        }
+        
+        // Persist metadata to Supabase table (optional but recommended)
+        async function saveImageRecord(record) {
+            // Ensure config is loaded
+            if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+                await loadConfig();
+            }
+            
+            if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+                console.warn('Supabase config not loaded, skipping DB save');
+                return null;
+            }
+            
+            try {
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/qa_images`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify(record)
+                });
+                if (!response.ok) throw new Error('DB insert failed');
+                return await response.json();
+            } catch (e) {
+                console.warn('Supabase DB insert warning:', e);
+                return null;
+            }
+        }
+
+        // Map image type to default label text
+        function getDefaultLabel(imageType) {
+            const labels = {
+                exterior_front: 'Front View',
+                exterior_back: 'Back View',
+                exterior_left: 'Left Side',
+                exterior_right: 'Right Side',
+                interior_dashboard: 'Dashboard',
+                interior_seats: 'Seats',
+                interior_floor: 'Floor Mats'
+            };
+            return labels[imageType] || 'Upload';
+        }
+
+        // Handle file selection
+        document.querySelectorAll('input[type="file"]').forEach(input => {
+            input.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const imageType = e.target.dataset.type;
+                const uploadBox = e.target.parentElement;
+                const imageId = generateId();
+                const inputEl = e.target;
+                
+                // Show loading state
+                uploadBox.innerHTML = '<div class="loader"></div><div class="upload-label">Uploading...</div>';
+                
+                try {
+                    // Upload to Supabase
+                    const imageUrl = await uploadToSupabase(file, imageType, imageId);
+                    
+                    // Preview image
+                    uploadBox.classList.add('uploaded');
+                    const img = document.createElement('img');
+                    img.src = URL.createObjectURL(file);
+                    img.className = 'preview-image';
+                    uploadBox.innerHTML = '';
+                    uploadBox.appendChild(img);
+                    
+                    const label = document.createElement('div');
+                    label.className = 'upload-label';
+                    label.textContent = '✓ Uploaded';
+                    uploadBox.appendChild(label);
+
+                    // Re-append file input (hidden) so users can reselect
+                    inputEl.value = '';
+                    inputEl.style.display = 'none';
+                    uploadBox.appendChild(inputEl);
+
+                    // Add remove button
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'remove-btn';
+                    removeBtn.textContent = '×';
+                    removeBtn.setAttribute('data-type', imageType);
+                    uploadBox.appendChild(removeBtn);
+                    
+                    // Store image data (only image-specific; attach IDs at submit time)
+                    const record = {
+                        image_id: imageId,
+                        image_url: imageUrl,
+                        image_type: imageType,
+                        uploaded_at: new Date().toISOString()
+                    };
+
+                    uploadedImages[imageType] = record;
+
+                    // Optional: also persist to Supabase table (requires table + RLS policy)
+                    saveImageRecord(record);
+                    
+                    updateProgress();
+                    
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    uploadBox.innerHTML = '<div class="upload-icon">❌</div><div class="upload-label">Upload failed. Click to retry.</div>';
+                }
+            });
+        });
+
+        // Handle remove clicks (event delegation)
+        document.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('.remove-btn');
+            if (!btn) return;
+            ev.stopPropagation();
+            const imageType = btn.getAttribute('data-type');
+            const box = btn.parentElement;
+            const input = box.querySelector('input[type="file"]');
+            
+            delete uploadedImages[imageType];
+            if (input) input.value = '';
+
+            // Restore placeholder UI
+            box.classList.remove('uploaded');
+            box.innerHTML = '';
+            if (input) box.appendChild(input);
+            const icon = document.createElement('div');
+            icon.className = 'upload-icon';
+            icon.textContent = '📷';
+            const label = document.createElement('div');
+            label.className = 'upload-label';
+            label.textContent = getDefaultLabel(imageType);
+            box.appendChild(icon);
+            box.appendChild(label);
+
+            updateProgress();
+        });
+        
+        function updateProgress() {
+            totalUploaded = Object.keys(uploadedImages).length;
+            const percentage = (totalUploaded / 7) * 100;
+            document.getElementById('progressBar').style.width = percentage + '%';
+            
+            const submitBtn = document.getElementById('submitBtn');
+            if (totalUploaded === 7) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = `Submit for Quality Check (${totalUploaded}/7 photos)`;
+            } else {
+                submitBtn.disabled = true;
+                submitBtn.textContent = `Upload All Photos (${totalUploaded}/7)`;
+            }
+        }
+        
+        // Handle form submission
+        document.getElementById('qaForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const resultDiv = document.getElementById('result');
+            const submitBtn = document.getElementById('submitBtn');
+            
+            // Show processing state
+            resultDiv.className = 'result processing';
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<div class="loader"></div><strong>Processing Quality Check...</strong><br>This will take 1-2 minutes. Please wait.';
+            submitBtn.disabled = true;
+            
+            // Prepare payload with current IDs applied to each image
+            const task_id = document.getElementById('taskId').value;
+            const fox_id = document.getElementById('foxId').value;
+            const client_id = document.getElementById('clientIdSelect').value; // UUID from dropdown
+            const vehicle_id = document.getElementById('vehicleId').value || 'UNKNOWN';
+
+            const images = Object.values(uploadedImages).map((img) => ({
+                ...img,
+                task_id,
+                fox_id,
+                client_id,
+                vehicle_id
+            }));
+
+            const payload = { task_id, fox_id, client_id, vehicle_id, images };
+            
+            // Wait for config to load
+            if (!N8N_WEBHOOK_URL) {
+                await loadConfig();
+            }
+            
+            if (!N8N_WEBHOOK_URL) {
+                alert('❌ Configuration not loaded. Please refresh the page or run "vercel dev"');
+                submitBtn.disabled = false;
+                return;
+            }
+            
+            try {
+                // Send to n8n webhook
+                const response = await fetch(N8N_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const ct = response.headers.get('content-type') || '';
+                const bodyText = await response.text();
+                let result;
+                if (ct.includes('application/json')) {
+                    // Tolerate empty body with JSON content-type
+                    result = bodyText ? JSON.parse(bodyText) : { status: 'ok' };
+                } else {
+                    result = { status: 'ok', raw: bodyText };
+                }
+                
+                // Display results
+                if (result.status === 'pass') {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>✅ Quality Check: PASSED</h3>
+                        <p><strong>Great job!</strong> All photos look clean.</p>
+                        <p><small>Processing time: ${result.processing_time_seconds}s</small></p>
+                    `;
+                } else if (result.status === 'fail') {
+                    resultDiv.className = 'result fail';
+                    resultDiv.innerHTML = `
+                        <h3>❌ Quality Check: FAILED</h3>
+                        <p><strong>Issues found:</strong> ${result.total_issues}</p>
+                        <p><strong>Action Required:</strong></p>
+                        <p>${result.feedback}</p>
+                        <p><small>Please address these issues and resubmit.</small></p>
+                    `;
+                } else {
+                    resultDiv.className = 'result processing';
+                    resultDiv.innerHTML = `
+                        <h3>⚠️ Quality Check: NEEDS REVIEW</h3>
+                        <p>Some images need manual review. Support team will contact you.</p>
+                    `;
+                }
+                
+                submitBtn.textContent = 'Submit Another Task';
+                submitBtn.disabled = false;
+                
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.className = 'result fail';
+                resultDiv.innerHTML = `
+                    <h3>❌ Error</h3>
+                    <p>Failed to process quality check. Please try again.</p>
+                    <p><small>Error: ${error.message}</small></p>
+                `;
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

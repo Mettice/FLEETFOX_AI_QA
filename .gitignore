@@ -1,0 +1,54 @@
+# Environment variables
+.env
+.env.local
+.env.production
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs (if you add a build step later)
+dist/
+build/
+*.min.js
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Node modules (if you add npm packages later)
+node_modules/
+
+# Python (if using Python server)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# n8n workflow exports (personal workflows)
+workflow-backup/
+*.n8n
+
+# Supabase local development
+.supabase/
+
+# Testing
+coverage/
+.nyc_output/
+

@@ -1,0 +1,758 @@
+{
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "vehicle-qa-trigger",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "33cadc31-9b4a-40e3-a006-01f15bdb4307",
+        "name": "Webhook Trigger - Image Upload",
+        "type": "n8n-nodes-base.webhook",
+        "position": [
+          -2016,
+          224
+        ],
+        "webhookId": "vehicle-qa-webhook",
+        "typeVersion": 2.1
+      },
+      {
+        "parameters": {
+          "jsCode": "// Parse and validate webhook input\nconst body = $json.body;\nconst images = body.images || [];\n\n// Required image types\nconst requiredExterior = ['exterior_front', 'exterior_back', 'exterior_left', 'exterior_right'];\nconst requiredInterior = ['interior_dashboard', 'interior_seats', 'interior_floor'];\nconst allRequired = [...requiredExterior, ...requiredInterior];\n\n// Validation: Check count\nif (images.length !== 7) {\n    throw new Error(`Validation Failed: Expected 7 images but received ${images.length}. Please upload all required photos (4 exterior + 3 interior).`);\n}\n\n// Get submitted types\nconst submittedTypes = images.map(img => img.image_type).filter(Boolean);\n\n// Check for duplicates\nconst uniqueTypes = [...new Set(submittedTypes)];\nif (uniqueTypes.length !== submittedTypes.length) {\n    const duplicates = submittedTypes.filter((type, idx) => submittedTypes.indexOf(type) !== idx);\n    throw new Error(`Validation Failed: Duplicate image types detected: ${duplicates.join(', ')}.`);\n}\n\n// Check missing types\nconst missingTypes = allRequired.filter(type => !submittedTypes.includes(type));\nif (missingTypes.length > 0) {\n    const missingExterior = missingTypes.filter(t => requiredExterior.includes(t));\n    const missingInterior = missingTypes.filter(t => requiredInterior.includes(t));\n    let errorMsg = `Validation Failed: Missing required image types:\\n`;\n    if (missingExterior.length > 0) errorMsg += `- Exterior: ${missingExterior.join(', ')}\\n`;\n    if (missingInterior.length > 0) errorMsg += `- Interior: ${missingInterior.join(', ')}`;\n    throw new Error(errorMsg);\n}\n\n// Basic image quality checks\nconst qualityIssues = [];\nimages.forEach(img => {\n    if (!img.image_url || img.image_url.includes('UNKNOWN')) {\n        qualityIssues.push(`Invalid URL for ${img.image_type}`);\n    }\n});\n\nif (qualityIssues.length > 0) {\n    throw new Error(`Image Quality Issues: ${qualityIssues.join(', ')}`);\n}\n\n// Return validated data\nreturn [{\n    json: {\n        task_id: body.task_id,\n        client_id: body.client_id,\n        fox_id: body.fox_id,\n        vehicle_id: body.vehicle_id,\n        images: images,\n        processing_start: $now.toISO(),\n        validation_passed: true\n    }\n}];"
+        },
+        "id": "9f8a3fa4-b619-400a-b556-5d777fe29437",
+        "name": "Validate Input",
+        "type": "n8n-nodes-base.code",
+        "position": [
+          -1616,
+          160
+        ],
+        "typeVersion": 2
+      },
+      {
+        "parameters": {
+          "operation": "get",
+          "tableId": "client_sla",
+          "filters": {
+            "conditions": [
+              {
+                "keyName": "id",
+                "keyValue": "={{ $json.client_id }}"
+              }
+            ]
+          }
+        },
+        "id": "9dd42928-eea2-4388-a13e-1c49bcd37640",
+        "name": "Fetch Client SLA",
+        "type": "n8n-nodes-base.supabase",
+        "position": [
+          -1312,
+          288
+        ],
+        "typeVersion": 1,
+        "credentials": {
+          "supabaseApi": {
+            "id": "ssoRuj3nSg7MISfq",
+            "name": "Supabase account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// Prepare single batch request with all 7 images for Claude\nconst inputData = $('Validate Input').item.json;\nconst slaData = $json;\nconst images = inputData.images;\n\n// Build detailed prompt with SLA context\nconst promptText = `You are analyzing 7 vehicle cleaning photos for quality assurance.\n\nClient SLA Rules:\n${JSON.stringify(slaData.sla_rules, null, 2)}\n\nPriority Areas:\n${JSON.stringify(slaData.priority_areas, null, 2)}\n\nImages Being Analyzed:\n${images.map((img, idx) => `${idx + 1}. ${img.image_type}`).join('\\n')}\n\nYour Task:\nFor EACH of the 7 images, analyze and detect:\n1. DIRT: Uncleaned areas (mud, stains, trash, dust, food spills, water spots)\n2. DAMAGE: Pre-existing scratches, dents, paint chips (DO NOT flag as cleaning issues)\n3. ACCEPTABLE: Items matching client exceptions from acceptable_dirt_types\n\nIMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanatory text.\n\nExpected JSON Structure:\n{\n  \"results\": [\n    {\n      \"image_index\": 0,\n      \"image_type\": \"exterior_front\",\n      \"image_id\": \"...\",\n      \"detections\": [\n        {\n          \"type\": \"dirt\" | \"damage\" | \"acceptable\",\n          \"location\": \"specific area description\",\n          \"severity\": 1-10,\n          \"confidence\": 0-100,\n          \"dirt_category\": \"mud_soil\" | \"food_spills\" | \"trash_debris\" | \"stains_organic\" | \"stains_inorganic\" | \"dust_residue\" | \"water_spots\" | \"other\",\n          \"description\": \"brief explanation\"\n        }\n      ],\n      \"overall_assessment\": \"clean\" | \"dirty\" | \"review_needed\"\n    }\n  ]\n}\n\nAnalyze all 7 images and return results for each.`;\n\n// Build content array with text + all 7 images\nconst content = [\n  {\n    type: \"text\",\n    text: promptText\n  }\n];\n\n// Add all 7 images\nimages.forEach((img, idx) => {\n  content.push({\n    type: \"image\",\n    source: {\n      type: \"url\",\n      url: img.image_url\n    }\n  });\n});\n\nreturn [{\n  json: {\n    task_id: inputData.task_id,\n    client_id: inputData.client_id,\n    fox_id: inputData.fox_id,\n    vehicle_id: inputData.vehicle_id,\n    images: images,\n    sla_rules: slaData.sla_rules,\n    priority_areas: slaData.priority_areas,\n    processing_start: inputData.processing_start,\n    // Prepared for AI call\n    ai_content: content,\n    model: \"claude-sonnet-4-20250514\"\n  }\n}];"
+        },
+        "id": "1416f887-a9bf-481e-b218-8c8f8f256326",
+        "name": "Prepare Batch AI Request",
+        "type": "n8n-nodes-base.code",
+        "position": [
+          -1088,
+          160
+        ],
+        "typeVersion": 2
+      },
+      {
+        "parameters": {
+          "jsCode": "// Parse AI response and apply SLA business rules\nconst aiResponse = $json;\nconst inputData = $('Prepare Batch AI Request').item.json;\nconst slaRules = inputData.sla_rules;\nconst images = inputData.images;\n\n// Extract AI response text and clean markdown\nlet aiResults;\ntry {\n  let responseText = aiResponse.content[0].text;\n  \n  // Remove markdown code blocks if present\n  responseText = responseText.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  \n  aiResults = JSON.parse(responseText);\n} catch (e) {\n  console.error('Failed to parse AI response:', e);\n  throw new Error('AI response parsing failed');\n}\n\nconst results = aiResults.results || [];\n\n// Apply SLA filtering and categorization\nconst processedResults = results.map((result, idx) => {\n  const imageData = images[idx] || {};\n  const detections = result.detections || [];\n  \n  const criticalAreas = slaRules.critical_areas || [];\n  const maxMinorIssues = slaRules.max_minor_issues || 3;\n  const acceptableDirtTypes = slaRules.acceptable_dirt_types || [];\n  \n  const criticalIssues = [];\n  const minorIssues = [];\n  const acceptableItems = [];\n  \n  detections.forEach(det => {\n    // Check if in critical area\n    const isCritical = criticalAreas.some(area => \n      det.location.toLowerCase().includes(area.toLowerCase())\n    );\n    \n    // Check if acceptable per SLA\n    const isAcceptable = acceptableDirtTypes.includes(det.dirt_category) || det.type === 'acceptable';\n    \n    const issue = {\n      image_id: imageData.image_id,\n      image_type: imageData.image_type || result.image_type,\n      type: det.type,\n      location: det.location,\n      severity: det.severity || 5,\n      confidence: det.confidence || 0,\n      dirt_category: det.dirt_category || 'other',\n      description: det.description || ''\n    };\n    \n    if (isAcceptable || det.type === 'damage') {\n      acceptableItems.push(issue);\n    } else if (isCritical || det.severity >= 7) {\n      criticalIssues.push(issue);\n    } else {\n      minorIssues.push(issue);\n    }\n  });\n  \n  const passes = criticalIssues.length === 0 && minorIssues.length <= maxMinorIssues;\n  \n  return {\n    image_id: imageData.image_id,\n    image_type: imageData.image_type || result.image_type,\n    image_url: imageData.image_url,\n    detections: detections,\n    critical_issues: criticalIssues,\n    minor_issues: minorIssues,\n    acceptable_items: acceptableItems,\n    total_issues: criticalIssues.length + minorIssues.length,\n    passes_sla: passes,\n    overall_assessment: result.overall_assessment\n  };\n});\n\n// Calculate overall status\nconst totalCritical = processedResults.reduce((sum, r) => sum + r.critical_issues.length, 0);\nconst totalMinor = processedResults.reduce((sum, r) => sum + r.minor_issues.length, 0);\nconst imagesFailed = processedResults.filter(r => !r.passes_sla).length;\nconst imagesPassed = processedResults.filter(r => r.passes_sla).length;\n\nconst allIssues = [];\nprocessedResults.forEach(r => {\n  allIssues.push(...r.critical_issues);\n  allIssues.push(...r.minor_issues);\n});\n\nconst overallStatus = imagesFailed === 0 ? 'pass' : 'fail';\n\nreturn [{\n  json: {\n    task_id: inputData.task_id,\n    fox_id: inputData.fox_id,\n    client_id: inputData.client_id,\n    vehicle_id: inputData.vehicle_id,\n    overall_status: overallStatus,\n    images_analyzed: results.length,\n    images_passed: imagesPassed,\n    images_failed: imagesFailed,\n    total_issues: totalCritical + totalMinor,\n    critical_issues_count: totalCritical,\n    minor_issues_count: totalMinor,\n    all_issues: allIssues,\n    detailed_results: processedResults,\n    ai_model_used: aiResponse.model,\n    average_confidence: allIssues.length > 0 \n      ? Math.round(allIssues.reduce((sum, i) => sum + (i.confidence || 0), 0) / allIssues.length)\n      : 100,\n    processing_start: inputData.processing_start,\n    processing_completed_at: $now.toISO(),\n    processing_time_seconds: Math.round(\n      (new Date($now).getTime() - new Date(inputData.processing_start).getTime()) / 1000\n    )\n  }\n}];"
+        },
+        "id": "1f0a8ccc-da23-44bb-8819-09534da43f00",
+        "name": "Parse & Apply SLA Rules",
+        "type": "n8n-nodes-base.code",
+        "position": [
+          192,
+          272
+        ],
+        "typeVersion": 2
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "fail-condition",
+                "leftValue": "={{ $json.overall_status }}",
+                "rightValue": "={{ $json.overall_status }}",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "d0cf82e4-99e1-45db-97ba-ad902e84c886",
+        "name": "Need Feedback?",
+        "type": "n8n-nodes-base.if",
+        "position": [
+          352,
+          368
+        ],
+        "typeVersion": 2.2
+      },
+      {
+        "parameters": {
+          "resource": "image",
+          "modelId": {
+            "__rl": true,
+            "value": "claude-haiku-4-5-20251001",
+            "mode": "list",
+            "cachedResultName": "claude-haiku-4-5-20251001"
+          },
+          "text": "=Generate brief, actionable cleaning instructions for a field worker.\n\nDetected Issues:\n{{ JSON.stringify($json.all_issues, null, 2) }}\n\nRequirements:\n- Maximum 2-3 sentences\n- Specific locations mentioned\n- Friendly, professional tone\n- Prioritize critical issues first\n- Use simple, clear language\n\nExample: \"Please re-clean the rear passenger seat - visible stains detected in the center. Also wipe down the dashboard on the driver's side.\"\n\nReturn only the feedback text, no JSON.",
+          "imageUrls": "={{ $('Prepare Batch AI Request').item.json.images.map(img => img.image_url).join(',') }}",
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.anthropic",
+        "typeVersion": 1,
+        "position": [
+          784,
+          208
+        ],
+        "id": "36441cff-173f-4b23-bd88-c51859c4c984",
+        "name": "Generate Feedback",
+        "credentials": {
+          "anthropicApi": {
+            "id": "sL1U2GWoKU760YyJ",
+            "name": "Anthropic account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "feedback-assignment",
+                "name": "feedback_text",
+                "value": "={{ $json.content && $json.content[0] ? $json.content[0].text : 'No feedback generated' }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "941c316d-c526-41b8-bb71-e1458e23e7fd",
+        "name": "Extract Feedback",
+        "type": "n8n-nodes-base.set",
+        "position": [
+          1072,
+          160
+        ],
+        "typeVersion": 3.4
+      },
+      {
+        "parameters": {
+          "jsCode": "// Merge feedback with results\nconst results = $('Parse & Apply SLA Rules').item.json;\nconst feedback = $json.feedback_text || '';\n\nreturn [{\n  json: {\n    ...results,\n    feedback_text: feedback,\n    feedback_generated: true\n  }\n}];"
+        },
+        "id": "777bc299-2f05-4c72-9f6a-1346c65babb4",
+        "name": "Merge Feedback",
+        "type": "n8n-nodes-base.code",
+        "position": [
+          1264,
+          272
+        ],
+        "typeVersion": 2
+      },
+      {
+        "parameters": {},
+        "id": "3344c9d5-f80e-4cad-9ef8-98b86f405aae",
+        "name": "Merge Branches",
+        "type": "n8n-nodes-base.merge",
+        "position": [
+          1280,
+          592
+        ],
+        "typeVersion": 3
+      },
+      {
+        "parameters": {
+          "tableId": "quality_checks",
+          "fieldsUi": {
+            "fieldValues": [
+              {
+                "fieldId": "task_id",
+                "fieldValue": "={{ $json.task_id || $('Parse & Apply SLA Rules').item.json.task_id || $('Prepare Batch AI Request').item.json.task_id }}"
+              },
+              {
+                "fieldId": "fox_id",
+                "fieldValue": "={{ $json.fox_id || $('Parse & Apply SLA Rules').item.json.fox_id || $('Prepare Batch AI Request').item.json.fox_id }}"
+              },
+              {
+                "fieldId": "client_id",
+                "fieldValue": "={{ $json.client_id }}"
+              },
+              {
+                "fieldId": "vehicle_id",
+                "fieldValue": "={{ $json.vehicle_id }}"
+              },
+              {
+                "fieldId": "overall_status",
+                "fieldValue": "={{ $json.overall_status }}"
+              },
+              {
+                "fieldId": "images_analyzed",
+                "fieldValue": "={{ Number($json.images_analyzed) || 0 }}"
+              },
+              {
+                "fieldId": "total_issues",
+                "fieldValue": "={{ Number($json.total_issues) || 0 }}"
+              },
+              {
+                "fieldId": "images_failed_quality",
+                "fieldValue": "={{ Number($json.critical_issues_count) || 0 }}"
+              },
+              {
+                "fieldId": "total_issues",
+                "fieldValue": "={{ Number($json.minor_issues_count) || 0 }}"
+              },
+              {
+                "fieldId": "ai_model_used",
+                "fieldValue": "={{ $json.ai_model_used }}"
+              },
+              {
+                "fieldId": "average_confidence",
+                "fieldValue": "={{ Number($json.average_confidence) || 0 }}"
+              },
+              {
+                "fieldId": "feedback_text",
+                "fieldValue": "={{ $json.feedback_text || '' }}"
+              },
+              {
+                "fieldId": "feedback_sent",
+                "fieldValue": "={{ $json.feedback_generated ? 'true' : 'false' }}"
+              },
+              {
+                "fieldId": "processing_completed_at",
+                "fieldValue": "={{ $json.processing_completed_at }}"
+              },
+              {
+                "fieldId": "processing_time_seconds",
+                "fieldValue": "={{ Number($json.processing_time_seconds) || 0 }}"
+              }
+            ]
+          }
+        },
+        "id": "ab0874a0-c465-468a-a4ec-71015ad6e95e",
+        "name": "Save to Database",
+        "type": "n8n-nodes-base.supabase",
+        "position": [
+          1520,
+          592
+        ],
+        "typeVersion": 1,
+        "credentials": {
+          "supabaseApi": {
+            "id": "ssoRuj3nSg7MISfq",
+            "name": "Supabase account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "notify-condition",
+                "leftValue": "={{ $json.overall_status }}",
+                "rightValue": "={{ $json.overall_status }}",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "f213417c-4a18-42e8-8a3e-eb1acca96670",
+        "name": "Should Notify?",
+        "type": "n8n-nodes-base.if",
+        "position": [
+          1664,
+          832
+        ],
+        "typeVersion": 2.2
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ {\n  \"status\": $node['Consolidate Results'].json.overall_status,\n  \"task_id\": $node['Consolidate Results'].json.task_id,\n  \"total_issues\": $node['Consolidate Results'].json.total_issues,\n  \"critical_issues_count\": $node['Consolidate Results'].json.critical_issues_count,\n  \"minor_issues_count\": $node['Consolidate Results'].json.minor_issues_count,\n  \"processing_time_seconds\": $node['Consolidate Results'].json.processing_time_seconds,\n  \"images_analyzed\": $node['Consolidate Results'].json.images_analyzed,\n  \"images_passed\": $node['Consolidate Results'].json.images_passed,\n  \"images_failed\": $node['Consolidate Results'].json.images_failed,\n  \"feedback\": $node['Extract Feedback Text'].json.feedback_text || $node['Consolidate Results'].json.feedback_text || ''\n} }}",
+          "options": {
+            "responseCode": 200
+          }
+        },
+        "id": "cf71ad70-4fcc-4530-bb5f-595afd74f878",
+        "name": "Respond to Webhook",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "position": [
+          2560,
+          640
+        ],
+        "typeVersion": 1.4
+      },
+      {
+        "parameters": {
+          "resource": "image",
+          "modelId": {
+            "__rl": true,
+            "value": "claude-sonnet-4-5-20250929",
+            "mode": "list",
+            "cachedResultName": "claude-sonnet-4-5-20250929"
+          },
+          "text": "=You are analyzing 7 vehicle cleaning photos for quality assurance.\n\nClient SLA Rules:\n{{ JSON.stringify($('Prepare Batch AI Request').item.json.sla_rules, null, 2) }}\n\nPriority Areas:\n{{ JSON.stringify($('Prepare Batch AI Request').item.json.priority_areas, null, 2) }}\n\nImages Being Analyzed:\n{{ $('Prepare Batch AI Request').item.json.images.map((img, idx) => `${idx + 1}. ${img.image_type}`).join('\\n') }}\n\nYour Task:\nFor EACH of the 7 images, analyze and detect:\n1. DIRT: Uncleaned areas (mud, stains, trash, dust, food spills, water spots)\n2. DAMAGE: Pre-existing scratches, dents, paint chips (DO NOT flag as cleaning issues)\n3. ACCEPTABLE: Items matching client exceptions from acceptable_dirt_types\n\nIMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanatory text.\n\nExpected JSON Structure:\n{\n  \"results\": [\n    {\n      \"image_index\": 0,\n      \"image_type\": \"exterior_front\",\n      \"image_id\": \"...\",\n      \"detections\": [\n        {\n          \"type\": \"dirt\" | \"damage\" | \"acceptable\",\n          \"location\": \"specific area description\",\n          \"severity\": 1-10,\n          \"confidence\": 0-100,\n          \"dirt_category\": \"mud_soil\" | \"food_spills\" | \"trash_debris\" | \"stains_organic\" | \"stains_inorganic\" | \"dust_residue\" | \"water_spots\" | \"other\",\n          \"description\": \"brief explanation\"\n        }\n      ],\n      \"overall_assessment\": \"clean\" | \"dirty\" | \"review_needed\"\n    }\n  ]\n}\n\nAnalyze all 7 images and return results for each.",
+          "imageUrls": "={{ $('Prepare Batch AI Request').item.json.images.map(img => img.image_url).join(',') }}",
+          "simplify": false,
+          "options": {
+            "maxTokens": 4096
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.anthropic",
+        "typeVersion": 1,
+        "position": [
+          -16,
+          272
+        ],
+        "id": "63bbbebc-5709-4817-89ac-7fef327d0c39",
+        "name": "Analyse image",
+        "credentials": {
+          "anthropicApi": {
+            "id": "sL1U2GWoKU760YyJ",
+            "name": "Anthropic account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "resource": "image",
+          "modelId": {
+            "__rl": true,
+            "value": "claude-haiku-4-5-20251001",
+            "mode": "list",
+            "cachedResultName": "claude-haiku-4-5-20251001"
+          },
+          "text": "=You are verifying vehicle photo submissions.\n\nThe user claims they submitted these 7 images:\n1. exterior_front\n2. exterior_back\n3. exterior_left\n4. exterior_right\n5. interior_dashboard\n6. interior_seats\n7. interior_floor\n\nYour task: For EACH image, verify if the actual content matches the claimed type.\n\nReturn ONLY valid JSON:\n{\n  \"verification\": [\n    {\n      \"index\": 0,\n      \"claimed_type\": \"exterior_front\",\n      \"actual_type\": \"exterior_front\" | \"exterior_back\" | \"interior_dashboard\" | etc,\n      \"matches\": true | false,\n      \"confidence\": 0-100,\n      \"reason\": \"brief explanation\"\n    }\n  ],\n  \"all_valid\": true | false,\n  \"error_message\": \"Missing interior photos\" | null\n}\n\nBe strict: If someone submits 7 exterior photos but claims 3 are interior, flag it.\n```\n\n**URL(s):**\n```\n{{ $('Prepare Batch AI Request').item.json.images.map(img => img.image_url).join(',') }}\n```",
+          "imageUrls": "={{ $('Prepare Batch AI Request').item.json.images.map(img => img.image_url).join(',') }}",
+          "simplify": false,
+          "options": {
+            "maxTokens": 4096
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.anthropic",
+        "typeVersion": 1,
+        "position": [
+          -848,
+          224
+        ],
+        "id": "8db72afc-e5ab-4cd2-b40a-ef0ced85e3a6",
+        "name": "Verify Image Types",
+        "credentials": {
+          "anthropicApi": {
+            "id": "sL1U2GWoKU760YyJ",
+            "name": "Anthropic account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "1e9b038e-cdd4-4345-bdac-03a5e0162528",
+                "leftValue": "={{ $json.error }}",
+                "rightValue": "false",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "or"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          -352,
+          320
+        ],
+        "id": "60fb3ecb-a085-46d4-85d9-5ec0ab98065f",
+        "name": "If"
+      },
+      {
+        "parameters": {
+          "jsCode": "const response = $json;\nlet verification;\n\ntry {\n  // Extract text and clean markdown\n  let responseText = response.content[0].text;\n  responseText = responseText.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  verification = JSON.parse(responseText);\n} catch (e) {\n  console.error('Failed to parse verification:', e);\n  throw new Error('Verification parsing failed');\n}\n\n// Check if all images are valid\nif (!verification.all_valid) {\n  // Images don't match - return error\n  return [{\n    json: {\n      error: true,\n      error_type: 'invalid_image_types',\n      message: verification.error_message,\n      invalid_images: verification.verification\n        .filter(v => !v.matches)\n        .map(v => ({\n          index: v.index,\n          claimed_type: v.claimed_type,\n          actual_type: v.actual_type,\n          reason: v.reason,\n          confidence: v.confidence\n        })),\n      // Include original data for error response\n      task_id: $('Validate Input').item.json.task_id,\n      fox_id: $('Validate Input').item.json.fox_id\n    }\n  }];\n}\n\n// All valid - pass through original data to continue workflow\nreturn [{\n  json: {\n    error: false,\n    verification_passed: true,\n    // Pass through all the prepared data\n    ...$('Prepare Batch AI Request').item.json\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -592,
+          224
+        ],
+        "id": "508d5139-2f2f-4b1c-ac8e-c29e29d4acb9",
+        "name": "Parse Verification Result"
+      },
+      {
+        "parameters": {
+          "sendTo": "efuetngongdion@gmail.com",
+          "subject": "=Feeback for : {{ $json.task_id }}",
+          "emailType": "text",
+          "message": "={{ $json.feedback_text }}",
+          "options": {
+            "appendAttribution": false
+          }
+        },
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.1,
+        "position": [
+          2160,
+          256
+        ],
+        "id": "24e28be7-49cf-4104-85f7-8aaea8992470",
+        "name": "Send a message",
+        "webhookId": "277460aa-400f-48ed-93c7-81c35d9d99a1",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "TfDQr1I3YNWXQ4Za",
+            "name": "Gmail account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"status\": \"rejected\",\n  \"error\": \"invalid_image_types\",\n  \"message\": \"{{ $json.message }}\",\n  \"TaskId\": {{ $json.task_id }}\n  \"details\": \"Please upload correct interior photos\"\n}",
+          "options": {
+            "responseCode": 200
+          }
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          -192,
+          -544
+        ],
+        "id": "42668409-2a23-4641-9720-1f44eac91c90",
+        "name": "Respond to Webhook2"
+      },
+      {
+        "parameters": {
+          "sendTo": "efuetngongdion@gmail.com",
+          "subject": "=Feeback for : {{ $json.task_id }}{{ ",
+          "emailType": "text",
+          "message": "={{ $json.feedback_text }}",
+          "options": {
+            "appendAttribution": false
+          }
+        },
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.1,
+        "position": [
+          144,
+          -416
+        ],
+        "id": "395d2d69-9e4d-49ec-8e1d-de69d74c51c6",
+        "name": "Send a message2",
+        "webhookId": "277460aa-400f-48ed-93c7-81c35d9d99a1",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "TfDQr1I3YNWXQ4Za",
+            "name": "Gmail account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "resource": "image",
+          "operation": "analyze",
+          "modelId": {
+            "__rl": true,
+            "value": "chatgpt-4o-latest",
+            "mode": "list",
+            "cachedResultName": "CHATGPT-4O-LATEST"
+          },
+          "text": "=Generate brief, actionable cleaning instructions for a field worker.\n\nDetected Issues:\n{{ JSON.stringify($json.all_issues, null, 2) }}\n\nRequirements:\n- Maximum 2-3 sentences\n- Specific locations mentioned\n- Friendly, professional tone\n- Prioritize critical issues first\n- Use simple, clear language\n\nExample: \"Please re-clean the rear passenger seat - visible stains detected in the center. Also wipe down the dashboard on the driver's side.\"\n\nReturn only the feedback text, no JSON.",
+          "imageUrls": "={{ $('Prepare Batch AI Request').item.json.images.map(img => img.image_url).join(',') }}",
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.openAi",
+        "typeVersion": 2,
+        "position": [
+          576,
+          96
+        ],
+        "id": "6150bab2-d174-40a1-8665-a0e97fefd537",
+        "name": "Analyze image",
+        "credentials": {
+          "openAiApi": {
+            "id": "f0WiovJc4P6YWLX0",
+            "name": "OpenAi account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Webhook Trigger - Image Upload": {
+        "main": [
+          [
+            {
+              "node": "Validate Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate Input": {
+        "main": [
+          [
+            {
+              "node": "Fetch Client SLA",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Client SLA": {
+        "main": [
+          [
+            {
+              "node": "Prepare Batch AI Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Batch AI Request": {
+        "main": [
+          [
+            {
+              "node": "Verify Image Types",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse & Apply SLA Rules": {
+        "main": [
+          [
+            {
+              "node": "Need Feedback?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Need Feedback?": {
+        "main": [
+          [
+            {
+              "node": "Analyze image",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Generate Feedback",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Merge Branches",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Generate Feedback": {
+        "main": [
+          []
+        ]
+      },
+      "Extract Feedback": {
+        "main": [
+          [
+            {
+              "node": "Merge Feedback",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Merge Feedback": {
+        "main": [
+          [
+            {
+              "node": "Merge Branches",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Merge Branches": {
+        "main": [
+          [
+            {
+              "node": "Save to Database",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Save to Database": {
+        "main": [
+          [
+            {
+              "node": "Should Notify?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Should Notify?": {
+        "main": [
+          [
+            {
+              "node": "Send a message",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Analyse image": {
+        "main": [
+          [
+            {
+              "node": "Parse & Apply SLA Rules",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Verify Image Types": {
+        "main": [
+          [
+            {
+              "node": "Parse Verification Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If": {
+        "main": [
+          [
+            {
+              "node": "Send a message2",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Respond to Webhook2",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Analyse image",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Verification Result": {
+        "main": [
+          [
+            {
+              "node": "If",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send a message": {
+        "main": [
+          []
+        ]
+      },
+      "Respond to Webhook2": {
+        "main": [
+          []
+        ]
+      },
+      "Analyze image": {
+        "main": [
+          []
+        ]
+      }
+    },
+    "pinData": {},
+    "meta": {
+      "templateCredsSetupCompleted": true,
+      "instanceId": "c606bf646de860591ff087c6d47b4263abe6c0d0b6555a4f7306305cee44b244"
+    }
+  }
