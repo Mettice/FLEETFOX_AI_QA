@@ -434,8 +434,33 @@ class QAUpload {
 
         const payload = { task_id, fox_id: userId, client_id, vehicle_id, images };
         
+        // Ensure config is loaded and get webhook URL
+        if (window.config) {
+            await window.config.waitForLoad();
+        }
+        
+        // Get webhook URL from config (may have loaded after constructor)
+        let webhookUrl = window.config?.N8N_WEBHOOK_URL || this.N8N_WEBHOOK_URL;
+        
+        if (!webhookUrl) {
+            resultDiv.className = 'result fail';
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = `
+                <h3>❌ Configuration Error</h3>
+                <p><strong>Webhook URL not configured.</strong></p>
+                <p><small>Please ensure N8N_WEBHOOK_URL is set in your environment variables or Vercel deployment.</small></p>
+                <p><small>Check browser console for more details.</small></p>
+            `;
+            submitBtn.disabled = false;
+            console.error('❌ N8N_WEBHOOK_URL is not set. Config:', window.config?.getAll());
+            return;
+        }
+        
+        console.log('📤 Submitting to webhook:', webhookUrl);
+        console.log('📦 Payload:', payload);
+        
         try {
-            const response = await fetch(this.N8N_WEBHOOK_URL, {
+            const response = await fetch(webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -521,12 +546,24 @@ class QAUpload {
             submitBtn.textContent = 'Submit Another Task';
             submitBtn.disabled = false;
         } catch (error) {
-            console.error('Error:', error);
+            console.error('❌ Submission error:', error);
+            console.error('Webhook URL attempted:', webhookUrl);
+            console.error('Full error:', error);
+            
+            // Provide more specific error messages
+            let errorMessage = error.message;
+            if (error.message === 'Failed to fetch' || error.message.includes('Failed to fetch')) {
+                errorMessage = 'Network error: Could not reach webhook. Check if n8n is running and CORS is configured.';
+            }
+            
             resultDiv.className = 'result fail';
+            resultDiv.style.display = 'block';
             resultDiv.innerHTML = `
-                <h3>❌ Error</h3>
-                <p>Failed to submit photos. Please try again.</p>
-                <p><small>Error: ${error.message}</small></p>
+                <h3>❌ Submission Failed</h3>
+                <p><strong>Failed to submit photos. Please try again.</strong></p>
+                <p><small>Error: ${errorMessage}</small></p>
+                <p><small style="color: var(--muted); font-size: 11px;">Webhook URL: ${webhookUrl || 'Not configured'}</small></p>
+                <p><small style="color: var(--muted); font-size: 11px;">Check browser console (F12) for more details.</small></p>
             `;
             submitBtn.disabled = false;
         }
