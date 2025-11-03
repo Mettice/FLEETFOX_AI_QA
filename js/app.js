@@ -21,8 +21,10 @@ class App {
             this.handleAuthChange(event, user);
         });
 
-        // Request notification permission
-        await notifications.requestPermission();
+        // Request notification permission (non-blocking - don't await)
+        notifications.requestPermission().catch(() => {
+            // Permission denied is fine, continue anyway
+        });
 
         // Check onboarding status and route
         await this.checkAndRoute();

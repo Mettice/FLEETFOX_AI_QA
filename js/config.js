@@ -35,9 +35,14 @@ class Config {
             if (response.ok) {
                 const data = await response.json();
                 
+                // Check for error from API
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
                 // Validate that we got all required values
-                if (!data.SUPABASE_URL || !data.SUPABASE_ANON_KEY || !data.N8N_WEBHOOK_URL) {
-                    throw new Error('Missing required environment variables in API response');
+                if (!data.SUPABASE_URL || !data.SUPABASE_ANON_KEY) {
+                    throw new Error('Missing required environment variables. Please set SUPABASE_URL and SUPABASE_ANON_KEY in Vercel dashboard.');
                 }
                 
                 // Set values from API (no keys exposed in client code!)
