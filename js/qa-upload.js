@@ -117,10 +117,20 @@ class QAUpload {
                 .select()
                 .single();
             
-            if (error) throw error;
+            if (error) {
+                // RLS or permission errors are expected - don't log as error
+                if (error.code === '42501' || error.code === 'PGRST301' || error.message?.includes('RLS') || error.message?.includes('permission')) {
+                    console.debug('Image record not saved (RLS/permission) - this is OK, images are still uploaded to storage');
+                    return null;
+                }
+                throw error;
+            }
             return data;
         } catch (error) {
-            console.warn('Supabase DB insert warning:', error);
+            // Only log unexpected errors
+            if (!error.code || (error.code !== '42501' && error.code !== 'PGRST301')) {
+                console.warn('Supabase DB insert warning:', error.message || error);
+            }
             return null;
         }
     }

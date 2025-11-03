@@ -335,8 +335,7 @@ class Auth {
             const userData = {
                 id: this.user.id,
                 email: this.user.email,
-                onboarding_completed: true,
-                updated_at: new Date().toISOString()
+                onboarding_completed: true
             };
 
             // First try to update if exists
@@ -359,8 +358,7 @@ class Auth {
                 const { error: updateError } = await window.supabaseClient
                     .from('users')
                     .update({
-                        onboarding_completed: true,
-                        updated_at: new Date().toISOString()
+                        onboarding_completed: true
                     })
                     .eq('id', this.user.id);
                 error = updateError;
@@ -370,12 +368,17 @@ class Auth {
             
             if (error) {
                 console.error('Database error:', error);
-                // If it's a permission/RLS error, still allow onboarding to complete
+                // If it's a permission/RLS error OR column doesn't exist, still allow onboarding to complete
                 // The user can still use the app - store in localStorage
-                if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS') || error.message?.includes('relation')) {
+                if (error.code === '42501' || error.code === '42703' || 
+                    error.message?.includes('permission') || 
+                    error.message?.includes('RLS') || 
+                    error.message?.includes('relation') ||
+                    error.message?.includes('column') ||
+                    error.message?.includes('schema cache')) {
                     console.warn('Database error, but allowing onboarding to proceed (storing in localStorage)');
                     localStorage.setItem(`onboarding_completed_${this.user.id}`, 'true');
-                    return { success: true, warning: 'Database permission issue, but onboarding marked as complete locally' };
+                    return { success: true, warning: 'Database error, but onboarding marked as complete locally' };
                 }
                 throw error;
             }
