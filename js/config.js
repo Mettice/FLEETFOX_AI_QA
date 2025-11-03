@@ -31,9 +31,26 @@ class Config {
         try {
             // Fetch from API route (reads from .env file via process.env)
             // Works when using 'vercel dev' locally OR in production
-            const response = await fetch('/api/config');
+            // Add cache-busting query param to prevent browser caching
+            const cacheBuster = `?t=${Date.now()}`;
+            const response = await fetch(`/api/config${cacheBuster}`, {
+                cache: 'no-store',
+                headers: {
+                    'Cache-Control': 'no-cache'
+                }
+            });
+            
             if (response.ok) {
                 const data = await response.json();
+                
+                console.log('📥 Config API response:', {
+                    hasSupabaseUrl: !!data.SUPABASE_URL,
+                    hasSupabaseKey: !!data.SUPABASE_ANON_KEY,
+                    hasN8nUrl: !!data.N8N_WEBHOOK_URL,
+                    n8nUrlPreview: data.N8N_WEBHOOK_URL ? 
+                        `${data.N8N_WEBHOOK_URL.substring(0, 50)}...` : 'NOT SET',
+                    hasError: !!data.error
+                });
                 
                 // Check for error from API
                 if (data.error) {
@@ -50,7 +67,13 @@ class Config {
                 this.SUPABASE_ANON_KEY = data.SUPABASE_ANON_KEY;
                 this.N8N_WEBHOOK_URL = data.N8N_WEBHOOK_URL;
                 this.loaded = true;
-                console.log('✅ Config loaded from API (.env file)');
+                
+                console.log('✅ Config loaded from API');
+                if (!this.N8N_WEBHOOK_URL) {
+                    console.warn('⚠️ N8N_WEBHOOK_URL is not set in environment variables!');
+                } else if (this.N8N_WEBHOOK_URL.includes('localhost')) {
+                    console.warn('⚠️ N8N_WEBHOOK_URL points to localhost:', this.N8N_WEBHOOK_URL);
+                }
             } else {
                 // API not available - try local fallback for development
                 console.warn('⚠️ /api/config failed. Status:', response.status);

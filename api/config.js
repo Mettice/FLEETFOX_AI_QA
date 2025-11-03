@@ -7,11 +7,23 @@ export default function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET');
     res.setHeader('Content-Type', 'application/json');
+    // Prevent caching of config response
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     
     // Get environment variables
     const SUPABASE_URL = process.env.SUPABASE_URL || '';
     const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
     const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || '';
+    
+    // Log what we're reading (for debugging - don't log actual keys)
+    console.log('🔍 API Config loaded:', {
+        hasSupabaseUrl: !!SUPABASE_URL,
+        hasSupabaseKey: !!SUPABASE_ANON_KEY,
+        hasN8nUrl: !!N8N_WEBHOOK_URL,
+        n8nUrlPreview: N8N_WEBHOOK_URL ? `${N8N_WEBHOOK_URL.substring(0, 30)}...` : 'NOT SET'
+    });
     
     // Check if required vars are missing
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
