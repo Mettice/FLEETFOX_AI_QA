@@ -1,0 +1,12 @@
+{
+  "name": "fleetfox-ai-qa",
+  "version": "1.0.0",
+  "description": "FleetFox AI-Powered Vehicle Quality Assurance Platform",
+  "scripts": {
+    "build": "echo 'No build step needed - static site'"
+  },
+  "engines": {
+    "node": ">=18.x"
+  }
+}
+
