@@ -246,6 +246,38 @@ class Auth {
             if (error) throw error;
             this.user = data.user;
             this.session = data.session;
+            
+            // Ensure user record exists in users table (for foreign key constraints)
+            if (data.user) {
+                try {
+                    // Check if user exists
+                    const { error: fetchError } = await window.supabaseClient
+                        .from('users')
+                        .select('id')
+                        .eq('id', data.user.id)
+                        .single();
+                    
+                    // If user doesn't exist (PGRST116 = no rows), create it
+                    if (fetchError && fetchError.code === 'PGRST116') {
+                        const userRecord = {
+                            id: data.user.id,
+                            email: data.user.email,
+                            full_name: data.user.user_metadata?.full_name || email.split('@')[0],
+                            role: 'fox', // Default to fox
+                            is_active: true,
+                            created_at: new Date().toISOString()
+                        };
+                        
+                        await window.supabaseClient
+                            .from('users')
+                            .insert(userRecord);
+                    }
+                } catch (dbError) {
+                    // Non-critical - log but don't fail sign-in
+                    console.warn('Could not ensure user record exists:', dbError.message || dbError);
+                }
+            }
+            
             return { success: true, user: data.user };
         } catch (error) {
             return { success: false, error: error.message };

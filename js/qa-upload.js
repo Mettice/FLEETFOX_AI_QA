@@ -118,6 +118,11 @@ class QAUpload {
                 .single();
             
             if (error) {
+                // Foreign key constraint = user doesn't exist in users table (non-critical)
+                if (error.code === '23503' || error.message?.includes('foreign key constraint') || error.message?.includes('violates foreign key')) {
+                    console.debug('Image record not saved (user not in users table) - this is OK, images are still uploaded to storage');
+                    return null;
+                }
                 // RLS or permission errors are expected - don't log as error
                 if (error.code === '42501' || error.code === 'PGRST301' || error.message?.includes('RLS') || error.message?.includes('permission')) {
                     console.debug('Image record not saved (RLS/permission) - this is OK, images are still uploaded to storage');
@@ -127,8 +132,10 @@ class QAUpload {
             }
             return data;
         } catch (error) {
-            // Only log unexpected errors
-            if (!error.code || (error.code !== '42501' && error.code !== 'PGRST301')) {
+            // Only log unexpected errors (skip foreign key, RLS, permission errors)
+            if (!error.code || 
+                (error.code !== '42501' && error.code !== 'PGRST301' && error.code !== '23503' &&
+                 !error.message?.includes('foreign key') && !error.message?.includes('RLS') && !error.message?.includes('permission'))) {
                 console.warn('Supabase DB insert warning:', error.message || error);
             }
             return null;
