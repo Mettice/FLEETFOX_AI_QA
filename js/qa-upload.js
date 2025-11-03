@@ -12,6 +12,107 @@ class QAUpload {
         this.setupEventListeners();
         this.presetGeneratedIds();
         this.loadClientsIntoSelect();
+        // Restore images after DOM is ready (slight delay to ensure inputs exist)
+        setTimeout(() => {
+            this.restoreUploadedImages();
+        }, 100);
+    }
+    
+    // Save uploaded images to localStorage
+    saveUploadedImages() {
+        try {
+            localStorage.setItem('qa_uploaded_images', JSON.stringify(this.uploadedImages));
+        } catch (e) {
+            console.warn('Could not save uploaded images to localStorage:', e);
+        }
+    }
+    
+    // Restore uploaded images from localStorage and display them
+    restoreUploadedImages() {
+        try {
+            const saved = localStorage.getItem('qa_uploaded_images');
+            if (!saved) return;
+            
+            const savedImages = JSON.parse(saved);
+            if (!savedImages || Object.keys(savedImages).length === 0) return;
+            
+            // Restore the data
+            this.uploadedImages = savedImages;
+            
+            // Restore visual state for each uploaded image
+            Object.entries(savedImages).forEach(([imageType, imageData]) => {
+                this.restoreImagePreview(imageType, imageData);
+            });
+            
+            // Update progress
+            this.updateProgress();
+            
+            console.log(`✅ Restored ${Object.keys(savedImages).length} uploaded images`);
+        } catch (e) {
+            console.warn('Could not restore uploaded images:', e);
+            // Clear corrupted data
+            localStorage.removeItem('qa_uploaded_images');
+        }
+    }
+    
+    // Restore visual preview for a single image
+    restoreImagePreview(imageType, imageData) {
+        // Map image_type (snake_case) to input ID (kebab-case)
+        const inputId = imageType.replace(/_/g, '-');
+        const input = document.getElementById(inputId);
+        if (!input) {
+            // Retry after a short delay (DOM might not be ready yet)
+            setTimeout(() => this.restoreImagePreview(imageType, imageData), 100);
+            return;
+        }
+        
+        const uploadBox = input.parentElement;
+        if (!uploadBox) return;
+        
+        // Recreate the uploaded state
+        uploadBox.classList.add('uploaded');
+        
+        // Create image preview
+        const img = document.createElement('img');
+        img.src = imageData.image_url; // Use the saved URL
+        img.className = 'preview-image';
+        img.onerror = () => {
+            // If image URL is invalid, remove it
+            delete this.uploadedImages[imageType];
+            this.saveUploadedImages();
+            uploadBox.innerHTML = '';
+            uploadBox.appendChild(input);
+            const icon = document.createElement('div');
+            icon.className = 'upload-icon';
+            icon.textContent = '📷';
+            const label = document.createElement('div');
+            label.className = 'upload-label';
+            label.textContent = this.getDefaultLabel(imageType);
+            uploadBox.appendChild(icon);
+            uploadBox.appendChild(label);
+        };
+        
+        uploadBox.innerHTML = '';
+        uploadBox.appendChild(img);
+        
+        // Add label
+        const label = document.createElement('div');
+        label.className = 'upload-label';
+        label.textContent = '✓ Uploaded';
+        uploadBox.appendChild(label);
+        
+        // Re-add file input (hidden)
+        input.value = '';
+        input.style.display = 'none';
+        uploadBox.appendChild(input);
+        
+        // Add remove button
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'remove-btn';
+        removeBtn.textContent = '×';
+        removeBtn.setAttribute('data-type', imageType);
+        uploadBox.appendChild(removeBtn);
     }
 
     generateSimpleId(prefix) {
@@ -107,8 +208,15 @@ class QAUpload {
     }
 
     // Save image record to Supabase qa_images table
+    // This is for tracking/reporting - images are already saved to Storage
     async saveImageRecord(record) {
         if (!window.supabaseClient) return null;
+        
+        // Don't try to save if no user ID (can't satisfy foreign key)
+        if (!record.fox_id) {
+            console.debug('Skipping qa_images save: no user ID');
+            return null;
+        }
         
         try {
             const { data, error } = await window.supabaseClient
@@ -118,26 +226,23 @@ class QAUpload {
                 .single();
             
             if (error) {
-                // Foreign key constraint = user doesn't exist in users table (non-critical)
+                // Foreign key constraint = user doesn't exist (should be rare now that we auto-create users)
                 if (error.code === '23503' || error.message?.includes('foreign key constraint') || error.message?.includes('violates foreign key')) {
-                    console.debug('Image record not saved (user not in users table) - this is OK, images are still uploaded to storage');
+                    console.debug('Image metadata not saved (user not in users table) - images are still in Storage');
                     return null;
                 }
-                // RLS or permission errors are expected - don't log as error
+                // RLS or permission errors - might need RLS policy update
                 if (error.code === '42501' || error.code === 'PGRST301' || error.message?.includes('RLS') || error.message?.includes('permission')) {
-                    console.debug('Image record not saved (RLS/permission) - this is OK, images are still uploaded to storage');
+                    console.debug('Image metadata not saved (RLS/permission) - images are still in Storage. Check RLS policies.');
                     return null;
                 }
-                throw error;
+                // Log other unexpected errors
+                console.warn('Unexpected error saving image metadata:', error.message || error);
+                return null;
             }
             return data;
         } catch (error) {
-            // Only log unexpected errors (skip foreign key, RLS, permission errors)
-            if (!error.code || 
-                (error.code !== '42501' && error.code !== 'PGRST301' && error.code !== '23503' &&
-                 !error.message?.includes('foreign key') && !error.message?.includes('RLS') && !error.message?.includes('permission'))) {
-                console.warn('Supabase DB insert warning:', error.message || error);
-            }
+            console.warn('Error saving image metadata:', error.message || error);
             return null;
         }
     }
@@ -215,8 +320,19 @@ class QAUpload {
 
             this.uploadedImages[imageType] = record;
             
-            // Save to Supabase qa_images table (optional but recommended)
-            this.saveImageRecord(record);
+            // Save to localStorage to persist across navigation
+            this.saveUploadedImages();
+            
+            // Save to Supabase qa_images table (for tracking/reporting)
+            // This will succeed if:
+            // 1. User record exists in users table (we auto-create on sign-in)
+            // 2. RLS policy allows insert
+            // If it fails, images are still uploaded to Storage and workflow works
+            this.saveImageRecord(record).then(saved => {
+                if (saved) {
+                    console.debug('✅ Image metadata saved to qa_images table');
+                }
+            });
             
             this.updateProgress();
         } catch (error) {
@@ -245,6 +361,9 @@ class QAUpload {
         box.appendChild(icon);
         box.appendChild(label);
 
+        // Save to localStorage after removal
+        this.saveUploadedImages();
+        
         this.updateProgress();
     }
 
@@ -391,6 +510,10 @@ class QAUpload {
             // Reset form
             this.uploadedImages = {};
             this.totalUploaded = 0;
+            
+            // Clear localStorage after successful submission
+            localStorage.removeItem('qa_uploaded_images');
+            
             this.updateProgress();
             document.getElementById('qaForm').reset();
             this.presetGeneratedIds();
