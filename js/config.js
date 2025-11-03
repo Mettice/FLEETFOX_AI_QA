@@ -47,19 +47,54 @@ class Config {
                 this.loaded = true;
                 console.log('✅ Config loaded from API (.env file)');
             } else {
-                // API not available - config will be null, app will fail gracefully
-                console.error('❌ /api/config failed. Status:', response.status);
-                console.error('💡 To fix: Run "vercel dev" to use .env file locally, or deploy to Vercel for production');
-                this.loaded = true;
+                // API not available - try local fallback for development
+                console.warn('⚠️ /api/config failed. Status:', response.status);
+                this.tryLocalFallback();
             }
         } catch (error) {
-            // API not available - config will be null
-            console.error('❌ Failed to load config from API:', error.message);
-            console.error('💡 To fix: Run "vercel dev" to use .env file locally, or deploy to Vercel for production');
-            this.loaded = true;
+            // API not available - try local fallback for development
+            console.warn('⚠️ Failed to load config from API:', error.message);
+            this.tryLocalFallback();
         } finally {
             this.loading = false;
         }
+    }
+
+    // Local development fallback (only works on localhost)
+    tryLocalFallback() {
+        const isLocalhost = window.location.hostname === 'localhost' || 
+                           window.location.hostname === '127.0.0.1' ||
+                           window.location.protocol === 'file:';
+        
+        if (!isLocalhost) {
+            // Production - fail gracefully
+            console.error('❌ /api/config not available in production. Check Vercel deployment.');
+            this.loaded = true;
+            return;
+        }
+        
+        // Local development - check localStorage for dev config
+        const devConfig = localStorage.getItem('dev_config');
+        if (devConfig) {
+            try {
+                const config = JSON.parse(devConfig);
+                this.SUPABASE_URL = config.SUPABASE_URL;
+                this.SUPABASE_ANON_KEY = config.SUPABASE_ANON_KEY;
+                this.N8N_WEBHOOK_URL = config.N8N_WEBHOOK_URL;
+                this.loaded = true;
+                console.log('✅ Using local development config from localStorage');
+                return;
+            } catch (e) {
+                console.error('Failed to parse dev_config from localStorage');
+            }
+        }
+        
+        // No local config found - show instructions
+        console.error('❌ No configuration available.');
+        console.error('💡 Options:');
+        console.error('   1. Run "npm i -g vercel && vercel dev" to use .env file');
+        console.error('   2. Set localStorage.dev_config = JSON.stringify({SUPABASE_URL: "...", SUPABASE_ANON_KEY: "...", N8N_WEBHOOK_URL: "..."})');
+        this.loaded = true;
     }
 
     // Wait for config to be loaded
