@@ -184,19 +184,24 @@ class QAUpload {
             removeBtn.setAttribute('data-type', imageType);
             uploadBox.appendChild(removeBtn);
             
-                    const record = {
-                        image_id: imageId,
-                        image_url: imageUrl,
-                        image_type: imageType,
-                        uploaded_at: new Date().toISOString()
-                    };
+            // Get authenticated user ID for proper data tracking and RLS security
+            const user = auth.getUser();
+            const userId = user?.id || null;
+            
+            const record = {
+                image_id: imageId,
+                image_url: imageUrl,
+                image_type: imageType,
+                uploaded_at: new Date().toISOString(),
+                fox_id: userId // Include user ID for RLS policy verification
+            };
 
-                    this.uploadedImages[imageType] = record;
-                    
-                    // Save to Supabase qa_images table (optional but recommended)
-                    this.saveImageRecord(record);
-                    
-                    this.updateProgress();
+            this.uploadedImages[imageType] = record;
+            
+            // Save to Supabase qa_images table (optional but recommended)
+            this.saveImageRecord(record);
+            
+            this.updateProgress();
         } catch (error) {
             console.error('Upload error:', error);
             uploadBox.innerHTML = '<div class="upload-icon">❌</div><div class="upload-label">Upload failed. Click to retry.</div>';
@@ -389,4 +394,3 @@ class QAUpload {
 }
 
 window.qaUpload = new QAUpload();
-

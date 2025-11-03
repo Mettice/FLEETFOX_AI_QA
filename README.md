@@ -4,6 +4,9 @@ A complete, production-ready solution for automated vehicle cleaning quality che
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
+[![Live Demo](https://img.shields.io/badge/live%20demo-vercel.app-000000?logo=vercel)](https://fleetfox-ai-qa.vercel.app/)
+
+**🌐 Live Application:** [https://fleetfox-ai-qa.vercel.app/](https://fleetfox-ai-qa.vercel.app/)
 
 ---
 
@@ -358,6 +361,12 @@ Add to `index.html` `<head>`:
 
 ## 🔄 Workflow Details
 
+### n8n Workflow Diagram
+
+![FleetFox QA Workflow](./public/Fleetfox%20QA.png)
+
+*Complete n8n workflow showing image processing, AI analysis, SLA application, and feedback generation.*
+
 ### n8n Workflow Steps
 
 1. **Webhook Trigger** - Receives photo submission
@@ -383,6 +392,10 @@ Add to `index.html` `<head>`:
 ---
 
 ## 🚢 Deployment
+
+### Live Demo
+
+🌐 **Production Deployment:** [https://fleetfox-ai-qa.vercel.app/](https://fleetfox-ai-qa.vercel.app/)
 
 ### Vercel (Recommended)
 
