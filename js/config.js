@@ -43,14 +43,10 @@ class Config {
             if (response.ok) {
                 const data = await response.json();
                 
-                console.log('📥 Config API response:', {
-                    hasSupabaseUrl: !!data.SUPABASE_URL,
-                    hasSupabaseKey: !!data.SUPABASE_ANON_KEY,
-                    hasN8nUrl: !!data.N8N_WEBHOOK_URL,
-                    n8nUrlPreview: data.N8N_WEBHOOK_URL ? 
-                        `${data.N8N_WEBHOOK_URL.substring(0, 50)}...` : 'NOT SET',
-                    hasError: !!data.error
-                });
+                // Only log in development
+                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                    console.log('📥 Config loaded from API');
+                }
                 
                 // Check for error from API
                 if (data.error) {
@@ -68,20 +64,27 @@ class Config {
                 this.N8N_WEBHOOK_URL = data.N8N_WEBHOOK_URL;
                 this.loaded = true;
                 
-                console.log('✅ Config loaded from API');
-                if (!this.N8N_WEBHOOK_URL) {
-                    console.warn('⚠️ N8N_WEBHOOK_URL is not set in environment variables!');
-                } else if (this.N8N_WEBHOOK_URL.includes('localhost')) {
-                    console.warn('⚠️ N8N_WEBHOOK_URL points to localhost:', this.N8N_WEBHOOK_URL);
+                // Only log in development
+                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                    console.log('✅ Config loaded from API');
+                    if (!this.N8N_WEBHOOK_URL) {
+                        console.warn('⚠️ N8N_WEBHOOK_URL is not set');
+                    } else if (this.N8N_WEBHOOK_URL.includes('localhost')) {
+                        console.warn('⚠️ N8N_WEBHOOK_URL points to localhost');
+                    }
                 }
             } else {
                 // API not available - try local fallback for development
-                console.warn('⚠️ /api/config failed. Status:', response.status);
+                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                    console.warn('⚠️ /api/config failed. Status:', response.status);
+                }
                 this.tryLocalFallback();
             }
         } catch (error) {
             // API not available - try local fallback for development
-            console.warn('⚠️ Failed to load config from API:', error.message);
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                console.warn('⚠️ Failed to load config from API:', error.message);
+            }
             this.tryLocalFallback();
         } finally {
             this.loading = false;
@@ -117,11 +120,13 @@ class Config {
             }
         }
         
-        // No local config found - show instructions
+        // No local config found - show instructions only in development
         console.error('❌ No configuration available.');
-        console.error('💡 Options:');
-        console.error('   1. Run "npm i -g vercel && vercel dev" to use .env file');
-        console.error('   2. Set localStorage.dev_config = JSON.stringify({SUPABASE_URL: "...", SUPABASE_ANON_KEY: "...", N8N_WEBHOOK_URL: "..."})');
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            console.error('💡 Options:');
+            console.error('   1. Run "npm i -g vercel && vercel dev" to use .env file');
+            console.error('   2. Set localStorage.dev_config = JSON.stringify({SUPABASE_URL: "...", SUPABASE_ANON_KEY: "...", N8N_WEBHOOK_URL: "..."})');
+        }
         this.loaded = true;
     }
 

@@ -442,15 +442,15 @@ class QAUpload {
         // Get webhook URL from config (may have loaded after constructor)
         let webhookUrl = window.config?.N8N_WEBHOOK_URL || this.N8N_WEBHOOK_URL;
         
-        // Debug: Log config state
-        console.log('🔍 Config state:', {
-            hasConfig: !!window.config,
-            configLoaded: window.config?.loaded,
-            webhookFromConfig: window.config?.N8N_WEBHOOK_URL,
-            webhookFromInstance: this.N8N_WEBHOOK_URL,
-            finalWebhookUrl: webhookUrl,
-            allConfig: window.config?.getAll?.()
-        });
+        // Debug: Log config state (only in development)
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            console.log('🔍 Config state:', {
+                hasConfig: !!window.config,
+                configLoaded: window.config?.loaded,
+                webhookFromConfig: window.config?.N8N_WEBHOOK_URL,
+                finalWebhookUrl: webhookUrl
+            });
+        }
         
         if (!webhookUrl) {
             resultDiv.className = 'result fail';
@@ -487,9 +487,11 @@ class QAUpload {
             return;
         }
         
-        console.log('📤 Submitting to webhook:', webhookUrl);
-        console.log('📦 Payload size:', JSON.stringify(payload).length, 'bytes');
-        console.log('📦 Payload:', payload);
+        // Only log in development
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            console.log('📤 Submitting to webhook:', webhookUrl);
+            console.log('📦 Payload size:', JSON.stringify(payload).length, 'bytes');
+        }
         
         // Create abort controller for timeout (if browser supports it)
         let abortController = null;
@@ -515,28 +517,94 @@ class QAUpload {
             // Clear timeout if request succeeds
             if (timeoutId) clearTimeout(timeoutId);
             
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            // Log response status (only in development)
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                console.log('📡 Webhook response status:', response.status, response.statusText);
+            }
+            
+            // Get response text once (can only be read once)
+            const contentType = response.headers.get('content-type') || '';
+            let responseText = '';
+            try {
+                responseText = await response.text();
+            } catch (e) {
+                console.error('❌ Could not read response body:', e);
+            }
+            
+            // Handle HTTP error statuses
+            if (!response.ok) {
+                console.error('❌ HTTP Error Response Body:', responseText);
+                const errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+                throw new Error(errorMsg);
+            }
             
             // Parse webhook response - n8n should return results when workflow completes
             let webhookResponse = null;
-            let responseText = '';
             try {
-                const contentType = response.headers.get('content-type') || '';
-                responseText = await response.text();
-                
-                console.log('Webhook response status:', response.status);
-                console.log('Webhook response content-type:', contentType);
-                console.log('Webhook response body (first 500 chars):', responseText.substring(0, 500));
+                // Only log full response in development
+                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                    console.log('📥 Webhook response content-type:', contentType);
+                    console.log('📥 Webhook response body:', responseText.substring(0, 500));
+                }
                 
                 if (responseText && (contentType.includes('application/json') || responseText.trim().startsWith('{'))) {
                     webhookResponse = JSON.parse(responseText);
-                    console.log('✅ Parsed webhook response:', webhookResponse);
-                } else if (responseText) {
-                    console.log('Non-JSON response:', responseText.substring(0, 200));
+                    // Only log parsed response in development
+                    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                        console.log('✅ Parsed webhook response');
+                    }
+                } else if (responseText && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+                    console.log('⚠️ Non-JSON response:', responseText.substring(0, 200));
                 }
             } catch (e) {
-                console.warn('⚠️ Could not parse webhook response:', e);
-                console.log('Raw response text:', responseText);
+                console.error('❌ Could not parse webhook response:', e);
+                // Only log full error in development
+                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                    console.error('Raw response text:', responseText);
+                }
+            }
+            
+            // Check for errors in webhook response FIRST
+            const hasError = webhookResponse?.error || 
+                           webhookResponse?.workflow_error || 
+                           webhookResponse?.status === 'error' ||
+                           webhookResponse?.failed === true;
+            
+            if (hasError) {
+                // Workflow failed - show error details
+                const errorMessage = webhookResponse?.error_message || 
+                                   webhookResponse?.error || 
+                                   webhookResponse?.message || 
+                                   'Workflow execution failed';
+                const errorNode = webhookResponse?.error_node || webhookResponse?.failed_node || 'Unknown';
+                const errorDetails = webhookResponse?.error_details || webhookResponse?.details || '';
+                
+                console.error('❌ Workflow error detected:', errorMessage);
+                // Only log full details in development
+                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                    console.error('Error details:', {
+                        node: errorNode,
+                        details: errorDetails,
+                        fullResponse: webhookResponse
+                    });
+                }
+                
+                resultDiv.className = 'result fail';
+                resultDiv.innerHTML = `
+                    <h3>❌ Quality Check Failed</h3>
+                    <p><strong>Workflow Error:</strong> ${errorMessage}</p>
+                    ${errorNode !== 'Unknown' ? `<p><small>Failed in node: ${errorNode}</small></p>` : ''}
+                    ${errorDetails ? `<p><small style="white-space: pre-line;">${errorDetails}</small></p>` : ''}
+                    <p><small>Task ID: ${task_id}</small></p>
+                    <p><small style="color: var(--muted); font-size: 11px;">
+                        💡 The workflow encountered an error. Please try again in a few moments.<br>
+                        If this persists, contact support. Check browser console (F12) for details.
+                    </small></p>
+                    <button onclick="window.location.reload()" class="btn-primary" style="margin-top: 12px;">Retry Submission</button>
+                `;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Try Again';
+                return;
             }
             
             // Show results if webhook returned them, otherwise show "processing" message
@@ -548,29 +616,158 @@ class QAUpload {
             
             if (webhookResponse && hasResults) {
                 // Webhook returned results - display them immediately!
-                resultDiv.className = status === 'pass' ? 'result success' : 'result fail';
                 const totalIssues = webhookResponse.total_issues || 0;
                 const feedback = webhookResponse.feedback || webhookResponse.feedback_text || '';
                 const processingTime = webhookResponse.processing_time_seconds || 0;
+                const issues = webhookResponse.issues || webhookResponse.all_issues || [];
                 
-                resultDiv.innerHTML = `
-                    <h3>${status === 'pass' ? '✅' : '❌'} Quality Check: ${status.toUpperCase()}</h3>
-                    <p><strong>${status === 'pass' ? 'Great job! All photos look clean.' : `Issues found: ${totalIssues}`}</strong></p>
-                    ${feedback ? `<p><strong>Feedback:</strong><br>${feedback}</p>` : ''}
-                    ${processingTime ? `<p><small>Processed in ${processingTime} seconds</small></p>` : ''}
-                    ${webhookResponse.images_analyzed ? `<p><small>Images analyzed: ${webhookResponse.images_analyzed} | Passed: ${webhookResponse.images_passed || 0} | Failed: ${webhookResponse.images_failed || 0}</small></p>` : ''}
-                    <p><small>Task ID: ${task_id}</small></p>
+                // Check if there are actual issues (even if status is 'pass' - this is a bug we need to fix)
+                const hasActualIssues = issues.length > 0 || totalIssues > 0 || (feedback && feedback.toLowerCase().includes('clean') === false);
+                
+                // Override status if issues detected but status is 'pass' (temporary frontend fix)
+                let displayStatus = status;
+                if (status === 'pass' && hasActualIssues) {
+                    displayStatus = 'review_needed'; // Change to review_needed instead of fail
+                    // Only log in development
+                    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                        console.warn('⚠️ Status mismatch: Workflow returned "pass" but issues detected. Overriding to "review_needed".');
+                    }
+                }
+                
+                // Set appropriate CSS class based on status
+                if (displayStatus === 'pass') {
+                    resultDiv.className = 'result success';
+                } else if (displayStatus === 'review_needed') {
+                    resultDiv.className = 'result review';
+                } else {
+                    resultDiv.className = 'result fail';
+                }
+                
+                // Build formatted output
+                let contentHtml = '';
+                
+                if (displayStatus === 'pass') {
+                    contentHtml = `
+                        <h3>✅ Quality Check: PASSED</h3>
+                        <p class="result-summary"><strong>Great job! All photos look clean.</strong></p>
+                    `;
+                } else if (displayStatus === 'review_needed') {
+                    // Display review needed status
+                    contentHtml = `
+                        <h3>⚠️ Quality Check: REVIEW NEEDED</h3>
+                        <p class="result-summary"><strong>Issues Found: ${totalIssues || issues.length || 'Multiple'}</strong></p>
+                        <p class="review-notice"><strong>Manual review required.</strong> Please address the issues below and resubmit.</p>
+                    `;
+                } else {
+                    // Display failed status
+                    contentHtml = `
+                        <h3>❌ Quality Check: FAILED</h3>
+                        <p class="result-summary"><strong>Critical Issues Found: ${totalIssues || issues.length || 'Multiple'}</strong></p>
+                        <p class="fail-notice"><strong>Action Required:</strong> Critical issues detected. Please address immediately and resubmit.</p>
+                    `;
+                }
+                
+                // Display issues if status is not 'pass'
+                if (displayStatus !== 'pass') {
+                    
+                    // Display detailed issues list if available
+                    if (issues.length > 0) {
+                        contentHtml += `
+                            <div class="issues-section">
+                                <h4>🔍 Detected Issues:</h4>
+                                <ul class="issues-list">
+                                    ${issues.map((issue, idx) => {
+                                        const issueType = (issue.type || issue.dirt_category || 'Issue').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                        const location = (issue.location || 'Unknown location').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                        const description = issue.description || issue.location || 'Issue detected';
+                                        const severity = issue.severity || issue.confidence || 'N/A';
+                                        const severityClass = severity >= 7 ? 'severity-critical' : severity >= 4 ? 'severity-moderate' : 'severity-minor';
+                                        
+                                        return `
+                                            <li class="issue-item ${severityClass}" data-severity="${severity}">
+                                                <div class="issue-header">
+                                                    <span class="issue-type">${issueType}</span>
+                                                    <span class="issue-severity-badge severity-${severity >= 7 ? 'critical' : severity >= 4 ? 'moderate' : 'minor'}">
+                                                        ${severity >= 7 ? '🔴 Critical' : severity >= 4 ? '🟡 Moderate' : '🟢 Minor'}
+                                                    </span>
+                                                </div>
+                                                <div class="issue-location">
+                                                    📍 <strong>Location:</strong> ${location}
+                                                </div>
+                                                <div class="issue-description">
+                                                    ${description}
+                                                </div>
+                                            </li>
+                                        `;
+                                    }).join('')}
+                                </ul>
+                            </div>
+                        `;
+                    }
+                    
+                    // Display feedback/cleaning instructions
+                    if (feedback) {
+                        // Parse markdown-style formatting in feedback
+                        const formattedFeedback = feedback
+                            .replace(/^#\s+(.+)$/gm, '<h4 class="feedback-header">$1</h4>')
+                            .replace(/\*\*Priority (\d+)[-\s]+(.+?):\*\*/g, '<div class="feedback-priority"><strong>Priority $1 - $2:</strong></div>')
+                            .replace(/\n\n/g, '</p><p>')
+                            .replace(/^(.+)$/gm, '<p>$1</p>');
+                        
+                        contentHtml += `
+                            <div class="feedback-section">
+                                <h4>📋 Cleaning Instructions:</h4>
+                                <div class="feedback-content">
+                                    ${formattedFeedback}
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+                
+                // Add summary info
+                contentHtml += `
+                    <div class="result-meta">
+                        ${processingTime ? `<div class="meta-item"><span class="meta-label">⏱️ Processing Time:</span> ${processingTime} seconds</div>` : ''}
+                        ${webhookResponse.images_analyzed ? `
+                            <div class="meta-item">
+                                <span class="meta-label">📊 Images:</span> 
+                                ${webhookResponse.images_analyzed} analyzed | 
+                                <span class="text-success">${webhookResponse.images_passed || 0} passed</span> | 
+                                <span class="text-error">${webhookResponse.images_failed || 0} failed</span>
+                            </div>
+                        ` : ''}
+                        <div class="meta-item"><span class="meta-label">🆔 Task ID:</span> ${task_id}</div>
+                    </div>
                 `;
+                
+                resultDiv.innerHTML = contentHtml;
             } else if (webhookResponse) {
                 // Webhook responded but format is unexpected - log it and show what we got
-                console.log('Webhook responded with unexpected format:', webhookResponse);
-                resultDiv.innerHTML = `
-                    <h3>✅ Photos Submitted!</h3>
-                    <p><strong>Quality check completed!</strong></p>
-                    <p><small>Processing finished. ${webhookResponse.feedback ? `Feedback: ${webhookResponse.feedback}` : 'No issues detected.'}</small></p>
-                    <p><small>Task ID: ${task_id}</small></p>
-                    <p><small style="color: var(--muted); font-size: 11px;">Note: Check browser console for full response details.</small></p>
-                `;
+                // Only log in development
+                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                    console.warn('⚠️ Webhook responded with unexpected format:', webhookResponse);
+                }
+                
+                // Check if it's a simple success message
+                if (webhookResponse.message || webhookResponse.success) {
+                    resultDiv.innerHTML = `
+                        <h3>✅ Photos Submitted!</h3>
+                        <p><strong>${webhookResponse.message || 'Quality check is processing...'}</strong></p>
+                        <p>You'll receive a <strong>real-time notification</strong> when the AI analysis is complete (1-2 minutes).</p>
+                        <p><small>Task ID: ${task_id}</small></p>
+                        <p><small style="color: var(--muted); font-size: 11px;">Note: Check browser console for full response details.</small></p>
+                    `;
+                } else {
+                    // Unknown format - show processing message
+                    resultDiv.innerHTML = `
+                        <h3>✅ Photos Submitted!</h3>
+                        <p><strong>Quality check is processing...</strong></p>
+                        <p>You'll receive a <strong>real-time notification</strong> when the AI analysis is complete (1-2 minutes).</p>
+                        <p><small>Task ID: ${task_id}</small></p>
+                        <p><small style="color: var(--muted); font-size: 11px;">Note: Check browser console (F12) for full response details.</small></p>
+                    `;
+                }
             } else {
                 // No webhook response or empty - workflow might be processing asynchronously
                 resultDiv.innerHTML = `
@@ -578,6 +775,7 @@ class QAUpload {
                     <p><strong>Quality check is processing...</strong></p>
                     <p>You'll receive a <strong>real-time notification</strong> when the AI analysis is complete (1-2 minutes).</p>
                     <p><small>Task ID: ${task_id}</small></p>
+                    <p><small style="color: var(--muted); font-size: 11px;">Note: If you don't receive a notification within 3 minutes, check the browser console (F12) or try resubmitting.</small></p>
                 `;
             }
             
@@ -598,12 +796,16 @@ class QAUpload {
             // Clear timeout if request fails
             if (timeoutId) clearTimeout(timeoutId);
             
-            console.error('❌ Submission error:', error);
-            console.error('Webhook URL attempted:', webhookUrl);
-            console.error('Error name:', error.name);
-            console.error('Error message:', error.message);
-            console.error('Error stack:', error.stack);
-            console.error('Full error object:', error);
+            console.error('❌ Submission error:', error.message);
+            // Only log full details in development
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                console.error('Webhook URL attempted:', webhookUrl);
+                console.error('Error details:', {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack
+                });
+            }
             
             // Provide more specific error messages
             let errorMessage = error.message;

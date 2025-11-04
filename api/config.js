@@ -2,6 +2,81 @@
 // This endpoint is safe to expose as it only returns public configuration
 // For sensitive keys, use server-side only
 
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+const require = createRequire(import.meta.url);
+const fs = require('fs');
+const path = require('path');
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Explicitly load .env file in development (vercel dev)
+// Vercel dev should auto-load .env, but sometimes it doesn't work
+// Try to load .env file - only works in local development, not production
+try {
+    // Try multiple possible locations for .env file
+    // Note: process.cwd() should work even with spaces in path
+    const possiblePaths = [
+        path.join(process.cwd(), '.env'),           // Current working directory
+        path.join(__dirname, '..', '.env'),         // One level up from api/ folder
+        path.join(__dirname, '..', '..', '.env'),  // Two levels up
+        path.resolve('.env'),                       // Absolute path from current dir
+        path.resolve(process.cwd(), '.env'),        // Explicit resolve with cwd
+    ];
+    
+    let envPath = null;
+    for (const possiblePath of possiblePaths) {
+        if (fs.existsSync(possiblePath)) {
+            envPath = possiblePath;
+            break;
+        }
+    }
+    
+    if (envPath && fs.existsSync(envPath)) {
+        // Read file and remove BOM if present
+        let envContent = fs.readFileSync(envPath, 'utf8');
+        // Remove UTF-8 BOM if present
+        if (envContent.charCodeAt(0) === 0xFEFF) {
+            envContent = envContent.slice(1);
+        }
+        
+        let loadedCount = 0;
+        const lines = envContent.split(/\r?\n/);
+        
+        lines.forEach((line) => {
+            const trimmed = line.trim();
+            // Skip comments and empty lines
+            if (trimmed && !trimmed.startsWith('#')) {
+                const equalIndex = trimmed.indexOf('=');
+                if (equalIndex > 0) {
+                    const key = trimmed.substring(0, equalIndex).trim();
+                    const value = trimmed.substring(equalIndex + 1).trim();
+                    // Remove quotes if present
+                    const cleanValue = value.replace(/^["']|["']$/g, '');
+                    // Only set if not already in process.env (don't override)
+                    if (!process.env[key] && cleanValue) {
+                        process.env[key] = cleanValue;
+                        loadedCount++;
+                    }
+                }
+            }
+        });
+        
+        // Only log in development (vercel dev)
+        if (process.env.VERCEL_ENV !== 'production' && loadedCount > 0) {
+            console.log(`✅ Loaded ${loadedCount} variable(s) from .env file`);
+        }
+    }
+} catch (error) {
+    // Silently fail - vercel dev should handle it, or it's production
+    // Only log errors in development
+    if (process.env.VERCEL_ENV !== 'production') {
+        console.log('⚠️ Could not load .env file (using Vercel env vars instead)');
+    }
+}
+
 export default function handler(req, res) {
     // CORS headers (allow frontend to fetch)
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -24,19 +99,20 @@ export default function handler(req, res) {
     const isLocalhost = N8N_WEBHOOK_URL && 
         (N8N_WEBHOOK_URL.includes('localhost') || N8N_WEBHOOK_URL.includes('127.0.0.1'));
     
-    console.log('🔍 API Config loaded:', {
-        hasSupabaseUrl: !!SUPABASE_URL,
-        hasSupabaseKey: !!SUPABASE_ANON_KEY,
-        hasN8nUrl: !!N8N_WEBHOOK_URL,
-        n8nUrlPreview: n8nUrlPreview,
-        isLocalhost: isLocalhost,
-        fullN8nUrl: N8N_WEBHOOK_URL || 'NOT SET' // Log full URL in server logs only
-    });
-    
-    // Warn if localhost URL in production
-    if (isLocalhost) {
-        console.warn('⚠️ WARNING: N8N_WEBHOOK_URL is localhost - this will NOT work from production Vercel deployment!');
-        console.warn('⚠️ You need a publicly accessible n8n instance (n8n.cloud or self-hosted with public URL)');
+    // Only log in development (not in production)
+    if (process.env.VERCEL_ENV !== 'production') {
+        console.log('🔍 API Config loaded:', {
+            hasSupabaseUrl: !!SUPABASE_URL,
+            hasSupabaseKey: !!SUPABASE_ANON_KEY,
+            hasN8nUrl: !!N8N_WEBHOOK_URL,
+            n8nUrlPreview: n8nUrlPreview,
+            isLocalhost: isLocalhost
+        });
+        
+        // Warn if localhost URL in development
+        if (isLocalhost) {
+            console.warn('⚠️ N8N_WEBHOOK_URL is localhost - this will NOT work from production!');
+        }
     }
     
     // Check if required vars are missing

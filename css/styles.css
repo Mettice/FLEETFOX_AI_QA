@@ -390,7 +390,7 @@ select option {
 /* Results */
 .result {
     margin-top: 20px;
-    padding: 20px;
+    padding: 24px;
     border-radius: 12px;
     display: none;
 }
@@ -407,10 +407,217 @@ select option {
     color: #ffd7d7;
 }
 
+.result.review {
+    background: rgba(237,137,54,0.12);
+    border: 1px solid rgba(237,137,54,0.45);
+    color: #ffe5d0;
+}
+
 .result.processing {
     background: rgba(66,153,225,0.12);
     border: 1px solid rgba(66,153,225,0.45);
     color: #d3e9ff;
+}
+
+.result h3 {
+    margin-bottom: 12px;
+    font-size: 22px;
+}
+
+.result-summary {
+    margin-bottom: 20px;
+    font-size: 16px;
+}
+
+.review-notice {
+    padding: 12px;
+    background: rgba(237,137,54,0.2);
+    border-radius: 8px;
+    margin: 12px 0;
+    border-left: 4px solid #ed8936;
+}
+
+.fail-notice {
+    padding: 12px;
+    background: rgba(245,101,101,0.2);
+    border-radius: 8px;
+    margin: 12px 0;
+    border-left: 4px solid #f56565;
+}
+
+/* Issues Display */
+.issues-section {
+    margin: 20px 0;
+    padding: 16px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 8px;
+    border-left: 4px solid var(--orange);
+}
+
+.issues-section h4 {
+    margin-bottom: 16px;
+    font-size: 18px;
+    color: var(--white);
+}
+
+.issues-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.issue-item {
+    padding: 16px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 8px;
+    border-left: 4px solid;
+    transition: all 0.2s;
+}
+
+.issue-item.severity-critical {
+    border-left-color: #f56565;
+    background: rgba(245,101,101,0.15);
+}
+
+.issue-item.severity-moderate {
+    border-left-color: #ed8936;
+    background: rgba(237,137,54,0.12);
+}
+
+.issue-item.severity-minor {
+    border-left-color: #ecc94b;
+    background: rgba(236,201,75,0.1);
+}
+
+.issue-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.issue-type {
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--white);
+}
+
+.issue-severity-badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.issue-severity-badge.severity-critical {
+    background: rgba(245,101,101,0.3);
+    color: #ffd7d7;
+}
+
+.issue-severity-badge.severity-moderate {
+    background: rgba(237,137,54,0.3);
+    color: #ffe5d0;
+}
+
+.issue-severity-badge.severity-minor {
+    background: rgba(236,201,75,0.3);
+    color: #fff8e0;
+}
+
+.issue-location {
+    margin: 8px 0;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.issue-location strong {
+    color: var(--white);
+}
+
+.issue-description {
+    margin-top: 8px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--white);
+}
+
+/* Feedback Section */
+.feedback-section {
+    margin: 20px 0;
+    padding: 16px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 8px;
+    border-left: 4px solid #4299e1;
+}
+
+.feedback-section h4 {
+    margin-bottom: 12px;
+    font-size: 18px;
+    color: var(--white);
+}
+
+.feedback-content {
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--white);
+}
+
+.feedback-header {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 12px 0 8px 0;
+    color: var(--orange);
+}
+
+.feedback-priority {
+    margin: 12px 0 8px 0;
+    padding: 8px 12px;
+    background: rgba(255,106,0,0.15);
+    border-radius: 6px;
+    font-weight: 700;
+    color: var(--orange);
+}
+
+.feedback-content p {
+    margin: 8px 0;
+    color: var(--white);
+}
+
+/* Result Meta */
+.result-meta {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.meta-item {
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.meta-label {
+    font-weight: 700;
+    color: var(--white);
+}
+
+.text-success {
+    color: #48bb78;
+    font-weight: 700;
+}
+
+.text-error {
+    color: #f56565;
+    font-weight: 700;
 }
 
 /* Loader */
