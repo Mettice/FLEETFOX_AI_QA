@@ -18,12 +18,26 @@ export default function handler(req, res) {
     const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || '';
     
     // Log what we're reading (for debugging - don't log actual keys)
+    // Also log full URL to Vercel function logs for debugging
+    const n8nUrlPreview = N8N_WEBHOOK_URL ? 
+        `${N8N_WEBHOOK_URL.substring(0, 50)}...` : 'NOT SET';
+    const isLocalhost = N8N_WEBHOOK_URL && 
+        (N8N_WEBHOOK_URL.includes('localhost') || N8N_WEBHOOK_URL.includes('127.0.0.1'));
+    
     console.log('🔍 API Config loaded:', {
         hasSupabaseUrl: !!SUPABASE_URL,
         hasSupabaseKey: !!SUPABASE_ANON_KEY,
         hasN8nUrl: !!N8N_WEBHOOK_URL,
-        n8nUrlPreview: N8N_WEBHOOK_URL ? `${N8N_WEBHOOK_URL.substring(0, 30)}...` : 'NOT SET'
+        n8nUrlPreview: n8nUrlPreview,
+        isLocalhost: isLocalhost,
+        fullN8nUrl: N8N_WEBHOOK_URL || 'NOT SET' // Log full URL in server logs only
     });
+    
+    // Warn if localhost URL in production
+    if (isLocalhost) {
+        console.warn('⚠️ WARNING: N8N_WEBHOOK_URL is localhost - this will NOT work from production Vercel deployment!');
+        console.warn('⚠️ You need a publicly accessible n8n instance (n8n.cloud or self-hosted with public URL)');
+    }
     
     // Check if required vars are missing
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {

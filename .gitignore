@@ -45,6 +45,13 @@ __pycache__/
 workflow-backup/
 *.n8n
 
+# n8n backup files (contain sensitive data, large files)
+n8n-data-backup/
+practical-elion-full-data/
+*-database.sqlite
+restored-database.sqlite
+original-database.sqlite
+
 # Supabase local development
 .supabase/
 
