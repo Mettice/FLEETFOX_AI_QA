@@ -40,51 +40,57 @@ class Config {
                 }
             });
             
-            if (response.ok) {
-                const data = await response.json();
-                
-                // Only log in development
-                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                    console.log('📥 Config loaded from API');
-                }
-                
-                // Check for error from API
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-                
-                // Validate that we got all required values
-                if (!data.SUPABASE_URL || !data.SUPABASE_ANON_KEY) {
-                    throw new Error('Missing required environment variables. Please set SUPABASE_URL and SUPABASE_ANON_KEY in Vercel dashboard.');
-                }
-                
-                // Set values from API (no keys exposed in client code!)
-                this.SUPABASE_URL = data.SUPABASE_URL;
-                this.SUPABASE_ANON_KEY = data.SUPABASE_ANON_KEY;
-                this.N8N_WEBHOOK_URL = data.N8N_WEBHOOK_URL;
-                this.loaded = true;
-                
-                // Only log in development
-                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                    console.log('✅ Config loaded from API');
-                    if (!this.N8N_WEBHOOK_URL) {
-                        console.warn('⚠️ N8N_WEBHOOK_URL is not set');
-                    } else if (this.N8N_WEBHOOK_URL.includes('localhost')) {
-                        console.warn('⚠️ N8N_WEBHOOK_URL points to localhost');
-                    }
-                }
-            } else {
-                // API not available - try local fallback for development
-                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                    console.warn('⚠️ /api/config failed. Status:', response.status);
+            // Log response status for debugging (even in production for errors)
+            if (!response.ok) {
+                console.error(`❌ /api/config failed with status: ${response.status} ${response.statusText}`);
+                // Try to get error message from response
+                try {
+                    const errorData = await response.text();
+                    console.error('Error response:', errorData.substring(0, 200));
+                } catch (e) {
+                    // Ignore
                 }
                 this.tryLocalFallback();
+                return;
+            }
+            
+            const data = await response.json();
+            
+            // Only log success in development
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                console.log('📥 Config loaded from API');
+            }
+            
+            // Check for error from API
+            if (data.error) {
+                console.error('❌ Config API returned error:', data.error);
+                throw new Error(data.error);
+            }
+            
+            // Validate that we got all required values
+            if (!data.SUPABASE_URL || !data.SUPABASE_ANON_KEY) {
+                console.error('❌ Missing required environment variables in API response');
+                throw new Error('Missing required environment variables. Please set SUPABASE_URL and SUPABASE_ANON_KEY in Vercel dashboard.');
+            }
+            
+            // Set values from API (no keys exposed in client code!)
+            this.SUPABASE_URL = data.SUPABASE_URL;
+            this.SUPABASE_ANON_KEY = data.SUPABASE_ANON_KEY;
+            this.N8N_WEBHOOK_URL = data.N8N_WEBHOOK_URL;
+            this.loaded = true;
+            
+            // Only log in development
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                console.log('✅ Config loaded from API');
+                if (!this.N8N_WEBHOOK_URL) {
+                    console.warn('⚠️ N8N_WEBHOOK_URL is not set');
+                } else if (this.N8N_WEBHOOK_URL.includes('localhost')) {
+                    console.warn('⚠️ N8N_WEBHOOK_URL points to localhost');
+                }
             }
         } catch (error) {
-            // API not available - try local fallback for development
-            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                console.warn('⚠️ Failed to load config from API:', error.message);
-            }
+            // API not available - log error and try local fallback
+            console.error('❌ Failed to load config from API:', error.message);
             this.tryLocalFallback();
         } finally {
             this.loading = false;
@@ -98,8 +104,13 @@ class Config {
                            window.location.protocol === 'file:';
         
         if (!isLocalhost) {
-            // Production - fail gracefully
-            console.error('❌ /api/config not available in production. Check Vercel deployment.');
+            // Production - this should not happen if /api/config is working
+            // The API endpoint should be available in production
+            console.error('❌ /api/config endpoint failed in production. Possible causes:');
+            console.error('   1. Environment variables not set in Vercel dashboard');
+            console.error('   2. Serverless function not deployed correctly');
+            console.error('   3. Check Vercel function logs for errors');
+            console.error('   → Go to Vercel dashboard → Your Project → Functions → /api/config');
             this.loaded = true;
             return;
         }
