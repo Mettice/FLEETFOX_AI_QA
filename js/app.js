@@ -80,11 +80,17 @@ class App {
 
     handleAuthChange(event, user) {
         if (event === 'SIGNED_OUT') {
+            // Reset subscription flags on logout
+            this._uploadNotificationsSubscribed = false;
+            notifications.unsubscribe();
             this.navigate('/login');
         } else if (event === 'SIGNED_IN' && user) {
             // Don't override if user is navigating to a specific route
             const hash = window.location.hash.slice(1);
-            if (!hash || hash === '/login' || hash === '/signup') {
+            const path = window.location.pathname;
+            // Only auto-route if on login/signup pages or no route
+            if ((!hash || hash === '/login' || hash === '/signup') && 
+                (path === '/' || path === '/login' || path === '/signup')) {
                 this.checkAndRoute();
             }
             // Otherwise let them stay on the route they're on
@@ -331,8 +337,9 @@ class App {
         // Initialize QA upload
         qaUpload.init();
 
-        // Setup realtime subscription for notifications
-        if (user) {
+        // Setup realtime subscription for notifications (only if not already subscribed)
+        if (user && !this._uploadNotificationsSubscribed) {
+            this._uploadNotificationsSubscribed = true;
             const role = await auth.getUserRole() || 'fox';
             notifications.subscribe(user.id, (qaResult) => {
                 // Update UI when QA completes (received via Supabase Realtime)
